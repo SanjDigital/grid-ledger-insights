@@ -62,6 +62,19 @@ export function YieldEfficiencyChart() {
           </span>
         </div>
       </div>
+
+      {/* Efficiency Metric Strip */}
+      <div className="px-4 py-3 border-b border-border flex items-center gap-6 bg-secondary/30">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Current Efficiency</span>
+          <span className="text-sm font-mono font-bold text-foreground tabular-nums">12.1 kg/kWh</span>
+        </div>
+        <span className="w-px h-4 bg-border" />
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Variance from Baseline</span>
+          <span className="text-sm font-mono font-bold text-[hsl(var(--gap-detected))] tabular-nums">-0.4%</span>
+        </div>
+      </div>
       <div className="p-4">
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={enriched} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
