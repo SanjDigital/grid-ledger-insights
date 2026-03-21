@@ -18,7 +18,7 @@ export interface VerifiedEvent {
   kwh: number;
   reportedCash: number;
   currency: string;
-  verification: "sovereign" | "review" | "gap";
+  verification: "sovereign" | "review" | "gap" | "floor-verified";
 }
 
 export interface ForensicData {
