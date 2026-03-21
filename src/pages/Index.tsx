@@ -47,6 +47,7 @@ const Index = () => {
             <AuditPanel data={currentForensic} isRedAlert={isRedAlert} />
             <div className="space-y-5">
               <EnergyChart />
+              <YieldEfficiencyChart />
             </div>
           </div>
 
