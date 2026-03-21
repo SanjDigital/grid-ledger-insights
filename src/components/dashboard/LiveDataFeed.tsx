@@ -42,10 +42,12 @@ export function LiveDataFeed({ events }: LiveDataFeedProps) {
                 <TableCell className="py-2.5">
                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${
                     evt.verification === "sovereign" ? "badge-sovereign" :
+                    evt.verification === "floor-verified" ? "badge-floor-verified" :
                     evt.verification === "review" ? "badge-review" :
                     "badge-gap"
                   }`}>
                     {evt.verification === "sovereign" ? "SOVEREIGN" :
+                     evt.verification === "floor-verified" ? "FLOOR GEN." :
                      evt.verification === "review" ? "REVIEW" : "GAP"}
                   </span>
                 </TableCell>

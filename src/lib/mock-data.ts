@@ -59,10 +59,10 @@ export const forensicData: ForensicData = {
 
 export const verifiedEvents: VerifiedEvent[] = [
   { id: "evt-001", timestamp: "2024-03-15 14:32:07", tokenId: "TKN-9A3F2", kwh: 59.9, reportedCash: 80865, currency: "K", verification: "sovereign" },
-  { id: "evt-002", timestamp: "2024-03-15 13:18:42", tokenId: "TKN-8B2E1", kwh: 61.2, reportedCash: 82621, currency: "K", verification: "sovereign" },
+  { id: "evt-002", timestamp: "2024-03-15 13:18:42", tokenId: "TKN-8B2E1", kwh: 61.2, reportedCash: 82621, currency: "K", verification: "floor-verified" },
   { id: "evt-003", timestamp: "2024-03-15 12:05:19", tokenId: "TKN-7C1D0", kwh: 58.4, reportedCash: 78840, currency: "K", verification: "sovereign" },
   { id: "evt-004", timestamp: "2024-03-15 10:47:33", tokenId: "TKN-6D0C9", kwh: 63.7, reportedCash: 85995, currency: "K", verification: "review" },
-  { id: "evt-005", timestamp: "2024-03-15 09:22:51", tokenId: "TKN-5E9B8", kwh: 57.1, reportedCash: 77085, currency: "K", verification: "sovereign" },
+  { id: "evt-005", timestamp: "2024-03-15 09:22:51", tokenId: "TKN-5E9B8", kwh: 57.1, reportedCash: 77085, currency: "K", verification: "floor-verified" },
   { id: "evt-006", timestamp: "2024-03-15 08:11:06", tokenId: "TKN-4F8A7", kwh: 60.5, reportedCash: 81675, currency: "K", verification: "sovereign" },
   { id: "evt-007", timestamp: "2024-03-14 23:55:44", tokenId: "TKN-3G7Z6", kwh: 55.8, reportedCash: 75330, currency: "K", verification: "gap" },
   { id: "evt-008", timestamp: "2024-03-14 22:40:12", tokenId: "TKN-2H6Y5", kwh: 62.3, reportedCash: 84105, currency: "K", verification: "sovereign" },

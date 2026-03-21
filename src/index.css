@@ -98,6 +98,9 @@
   .badge-gap {
     @apply bg-[hsl(var(--gap-detected)/0.15)] text-[hsl(var(--gap-detected))] border border-[hsl(var(--gap-detected)/0.3)];
   }
+  .badge-floor-verified {
+    @apply bg-[hsl(185,70%,50%,0.1)] text-[hsl(185,70%,50%)] border border-[hsl(185,70%,50%,0.3)];
+  }
   .scrollbar-terminal::-webkit-scrollbar {
     width: 4px;
   }
