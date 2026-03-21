@@ -5,6 +5,7 @@ import { StreakHeader } from "@/components/dashboard/StreakHeader";
 import { AuditPanel } from "@/components/dashboard/AuditPanel";
 import { LiveDataFeed } from "@/components/dashboard/LiveDataFeed";
 import { EnergyChart } from "@/components/dashboard/EnergyChart";
+import { YieldEfficiencyChart } from "@/components/dashboard/YieldEfficiencyChart";
 import type { Mill } from "@/lib/mock-data";
 
 const Index = () => {
@@ -46,6 +47,7 @@ const Index = () => {
             <AuditPanel data={currentForensic} isRedAlert={isRedAlert} />
             <div className="space-y-5">
               <EnergyChart />
+              <YieldEfficiencyChart />
             </div>
           </div>
 
