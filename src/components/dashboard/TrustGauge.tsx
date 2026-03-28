@@ -3,11 +3,26 @@ interface TrustGaugeProps {
   isRedAlert: boolean;
 }
 
+function getTierLabel(score: number): { tier: string; range: string } {
+  if (score >= 85) return { tier: "INSTITUTIONAL", range: "85–100" };
+  if (score >= 70) return { tier: "COMMERCIAL", range: "70–84" };
+  if (score >= 50) return { tier: "SUBPRIME", range: "50–69" };
+  return { tier: "HIGH RISK", range: "<50" };
+}
+
 export function TrustGauge({ score, isRedAlert }: TrustGaugeProps) {
   const percentage = score;
   const circumference = 2 * Math.PI * 54;
   const dashOffset = circumference - (percentage / 100) * circumference;
-  const color = isRedAlert ? "hsl(var(--gap-detected))" : "hsl(var(--sovereign))";
+  const { tier, range } = getTierLabel(score);
+
+  const color = isRedAlert
+    ? "hsl(var(--gap-detected))"
+    : score >= 85
+    ? "hsl(var(--sovereign))"
+    : score >= 70
+    ? "hsl(var(--under-review))"
+    : "hsl(var(--gap-detected))";
 
   return (
     <div className="flex flex-col items-center py-4">
@@ -30,17 +45,21 @@ export function TrustGauge({ score, isRedAlert }: TrustGaugeProps) {
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`text-3xl font-mono font-bold tabular ${isRedAlert ? "text-destructive" : "text-primary"}`}>
-            {score.toFixed(1)}
+          <span className={`text-3xl font-mono font-bold tabular ${
+            isRedAlert ? "text-destructive" : score >= 85 ? "text-primary" : "text-[hsl(var(--under-review))]"
+          }`}>
+            {score.toFixed(0)}
           </span>
           <span className="text-[10px] text-muted-foreground font-mono">/100</span>
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground mt-4 font-mono">Target: 98.2/100</p>
-      <p className={`text-xs font-semibold mt-1 ${isRedAlert ? "text-destructive" : "text-primary"}`}>
-        {score >= 98 ? "EXCEEDS TARGET" : score >= 95 ? "ON TARGET" : "BELOW THRESHOLD"}
+      <p className={`text-xs font-mono font-semibold mt-4 ${
+        isRedAlert ? "text-destructive" : score >= 85 ? "text-primary" : "text-[hsl(var(--under-review))]"
+      }`}>
+        {tier}
       </p>
+      <p className="text-[10px] text-muted-foreground mt-1 font-mono">Score Range: {range}</p>
     </div>
   );
 }
