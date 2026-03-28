@@ -12,6 +12,14 @@ export interface StreakDay {
   status: "sovereign" | "review" | "gap" | "pending";
 }
 
+export type AnomalyType = "holiday-heist" | "leading-day" | "m1-corridor";
+
+export interface AnomalyFlag {
+  type: AnomalyType;
+  label: string;
+  detail: string;
+}
+
 export interface VerifiedEvent {
   id: string;
   timestamp: string;
@@ -20,6 +28,10 @@ export interface VerifiedEvent {
   reportedCash: number;
   currency: string;
   verification: "sovereign" | "review" | "gap" | "floor-verified";
+  anomalies?: AnomalyFlag[];
+  tokenPurchaseTimestamp?: string; // for Leading Day detection
+  isPeakHour?: boolean; // 08:00-17:00 CAT
+  revenueUplift?: number; // % vs baseline, for M1 Corridor
 }
 
 export type SystemState = "VERIFIED" | "UNDER REVIEW" | "COMPROMISED" | "SUSPENDED";
