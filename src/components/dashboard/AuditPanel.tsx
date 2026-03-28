@@ -1,7 +1,7 @@
 import { type ForensicData } from "@/lib/mock-data";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TrustGauge } from "./TrustGauge";
-import { Lock, FileCheck, Cpu, TrendingDown, Shield, Landmark } from "lucide-react";
+import { Lock, FileCheck, Cpu, TrendingDown, Shield, Landmark, Clock, Gauge, BarChart3 } from "lucide-react";
 
 interface AuditPanelProps {
   data: ForensicData;
@@ -12,8 +12,12 @@ export function AuditPanel({ data, isRedAlert }: AuditPanelProps) {
   const varianceColor = data.physicsVariance > 2.0
     ? "text-destructive"
     : data.physicsVariance > 1.5
-    ? "text-under-review"
+    ? "text-[hsl(var(--under-review))]"
     : "text-primary";
+
+  const secInRange = data.currentSEC >= data.secRange[0] && data.currentSEC <= data.secRange[1];
+  const earHealthy = data.ear <= 100;
+  const ntpHealthy = data.ntpOffset <= 300; // 5 minutes in seconds
 
   return (
     <div className="card-terminal animate-slide-up">
@@ -21,7 +25,7 @@ export function AuditPanel({ data, isRedAlert }: AuditPanelProps) {
         <div className="border-b border-border px-4 pt-3">
           <TabsList className="bg-transparent gap-0 h-auto p-0">
             {[
-              { value: "forensic", label: "Forensic L1-4", icon: Cpu },
+              { value: "forensic", label: "Forensic L0-4", icon: Cpu },
               { value: "trust", label: "Trust L5", icon: Shield },
               { value: "capital", label: "Capital L6", icon: Landmark },
             ].map(t => (
@@ -37,8 +41,24 @@ export function AuditPanel({ data, isRedAlert }: AuditPanelProps) {
           </TabsList>
         </div>
 
-        <TabsContent value="forensic" className="p-4 mt-0 space-y-4">
-          {/* Root Hash */}
+        <TabsContent value="forensic" className="p-4 mt-0 space-y-3">
+          {/* L0 — Temporal Integrity */}
+          <div className="p-3 rounded bg-secondary/50 border border-border">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">L0 · Temporal Integrity (NTP ±5 min)</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-sm font-mono font-semibold ${ntpHealthy ? "text-primary" : "text-destructive"}`}>
+                {ntpHealthy ? "✓" : "✗"} Δ {data.ntpOffset.toFixed(1)}s
+              </span>
+              <span className="text-[10px] text-muted-foreground font-mono">
+                {ntpHealthy ? "Within tolerance" : "TEMPORAL BREACH"}
+              </span>
+            </div>
+          </div>
+
+          {/* L1 — Root Hash */}
           <div className="p-3 rounded bg-secondary/50 border border-border">
             <div className="flex items-center gap-2 mb-2">
               <Lock className="w-3.5 h-3.5 text-muted-foreground" />
@@ -47,18 +67,40 @@ export function AuditPanel({ data, isRedAlert }: AuditPanelProps) {
             <p className="font-mono text-sm text-foreground break-all">{data.rootHash}</p>
           </div>
 
-          {/* Signature */}
+          {/* L1 — Signature */}
           <div className="p-3 rounded bg-secondary/50 border border-border">
             <div className="flex items-center gap-2 mb-2">
               <FileCheck className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">L2 · Signature Verification ({data.signatureAlgo})</span>
+              <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">L1 · Signature Verification ({data.signatureAlgo})</span>
             </div>
             <span className={`text-sm font-mono font-semibold ${data.signatureStatus === "Valid" ? "text-primary" : "text-destructive"}`}>
               {data.signatureStatus === "Valid" ? "✓" : "✗"} {data.signatureStatus}
             </span>
           </div>
 
-          {/* Physics Variance */}
+          {/* L2 — SEC (Physics) */}
+          <div className="p-3 rounded bg-secondary/50 border border-border">
+            <div className="flex items-center gap-2 mb-2">
+              <Gauge className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">L2 · Specific Energy Consumption (SEC)</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-2xl font-mono font-bold tabular ${secInRange ? "text-primary" : "text-destructive"}`}>
+                {data.currentSEC.toFixed(4)}
+              </span>
+              <span className="text-[10px] text-muted-foreground font-mono">kWh/kg</span>
+            </div>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-[10px] font-mono text-muted-foreground">
+                Calibration: {data.secRange[0]} – {data.secRange[1]} kWh/kg (±5%)
+              </span>
+              <span className={`text-[10px] font-mono font-semibold ${secInRange ? "text-primary" : "text-destructive"}`}>
+                {secInRange ? "✓ IN RANGE" : "✗ PHYSICS BREACH"}
+              </span>
+            </div>
+          </div>
+
+          {/* L3-4 — Physics Variance */}
           <div className="p-3 rounded bg-secondary/50 border border-border">
             <div className="flex items-center gap-2 mb-2">
               <TrendingDown className="w-3.5 h-3.5 text-muted-foreground" />
@@ -73,6 +115,30 @@ export function AuditPanel({ data, isRedAlert }: AuditPanelProps) {
             {data.physicsVariance > 2.0 && (
               <p className="text-xs text-destructive mt-2 font-mono">⚠ VARIANCE EXCEEDS THRESHOLD — INTEGRITY COMPROMISED</p>
             )}
+          </div>
+
+          {/* L4 — EAR */}
+          <div className={`p-3 rounded border ${data.earGap > 5 ? "border-[hsl(var(--under-review))/0.4] bg-[hsl(var(--under-review))/0.05]" : "border-border bg-secondary/50"}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">L4 · Energy Accountability Ratio (EAR)</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-2xl font-mono font-bold tabular ${earHealthy ? (data.earGap > 5 ? "text-[hsl(var(--under-review))]" : "text-primary") : "text-destructive"}`}>
+                {data.ear.toFixed(1)}%
+              </span>
+              <span className="text-[10px] text-muted-foreground font-mono">Reported / Metered</span>
+            </div>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className={`text-[10px] font-mono font-semibold ${data.earGap > 5 ? "text-[hsl(var(--under-review))]" : "text-primary"}`}>
+                {data.earGap}% GAP
+              </span>
+              {data.earGap > 5 && (
+                <span className="text-[9px] font-mono text-[hsl(var(--under-review))]">
+                  [UNDER ACTIVE REVIEW] — Invisibility Layer audit in progress
+                </span>
+              )}
+            </div>
           </div>
         </TabsContent>
 
@@ -94,15 +160,15 @@ export function AuditPanel({ data, isRedAlert }: AuditPanelProps) {
             </div>
             <div className="p-4 rounded bg-secondary/50 border border-border text-center">
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase mb-2">Grade</p>
-              <p className="text-xl font-mono font-bold text-primary">{data.institutionalGrade}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">institutional</p>
+              <p className="text-xl font-mono font-bold text-[hsl(var(--under-review))]">{data.institutionalGrade}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">{data.trustTier.toLowerCase()}</p>
             </div>
           </div>
 
-          <div className={`p-4 rounded border ${isRedAlert ? "border-destructive/50 bg-destructive/5" : "border-primary/30 bg-primary/5"}`}>
+          <div className={`p-4 rounded border ${isRedAlert ? "border-destructive/50 bg-destructive/5" : "border-[hsl(var(--under-review))/0.3] bg-[hsl(var(--under-review))/0.05]"}`}>
             <p className="text-[10px] font-mono tracking-widest uppercase mb-1 text-muted-foreground">Investor Verdict</p>
-            <p className={`text-lg font-semibold ${isRedAlert ? "text-destructive" : "text-primary"}`}>
-              {isRedAlert ? "DECLINE / HIGH RISK" : "APPROVE / INVESTMENT GRADE"}
+            <p className={`text-lg font-semibold ${isRedAlert ? "text-destructive" : "text-[hsl(var(--under-review))]"}`}>
+              {isRedAlert ? "DECLINE / HIGH RISK" : data.trustTier === "INSTITUTIONAL" ? "APPROVE / INVESTMENT GRADE" : "CONDITIONAL / UNDER REVIEW"}
             </p>
           </div>
         </TabsContent>

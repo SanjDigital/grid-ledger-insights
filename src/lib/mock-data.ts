@@ -4,6 +4,7 @@ export interface Mill {
   operator: string;
   meterId: string;
   phone: string;
+  assetClass: string;
 }
 
 export interface StreakDay {
@@ -21,6 +22,9 @@ export interface VerifiedEvent {
   verification: "sovereign" | "review" | "gap" | "floor-verified";
 }
 
+export type SystemState = "VERIFIED" | "UNDER REVIEW" | "COMPROMISED" | "SUSPENDED";
+export type TrustTier = "INSTITUTIONAL" | "COMMERCIAL" | "SUBPRIME" | "HIGH RISK";
+
 export interface ForensicData {
   rootHash: string;
   signatureAlgo: string;
@@ -30,14 +34,23 @@ export interface ForensicData {
   bpsAdjustment: number;
   leverageCap: number;
   institutionalGrade: string;
+  // v2.4.1 additions
+  secRange: [number, number]; // kWh/kg calibration bounds
+  currentSEC: number;
+  ear: number; // Energy Accountability Ratio (%)
+  earGap: number; // % gap
+  systemState: SystemState;
+  trustTier: TrustTier;
+  ntpOffset: number; // seconds offset from NTP
+  lastCalibration: string;
 }
 
 export const mills: Mill[] = [
-  { id: "mill-1", name: "Jeremiah", operator: "Nabiwi Chitsazo", meterId: "37154463253", phone: "0998-265-527" },
-  { id: "mill-2", name: "Solomon", operator: "Chimwemwe Banda", meterId: "37154463287", phone: "0991-442-108" },
-  { id: "mill-3", name: "Ezekiel", operator: "Tadala Phiri", meterId: "37154463301", phone: "0885-771-934" },
-  { id: "mill-4", name: "Nehemiah", operator: "Kondwani Mwale", meterId: "37154463319", phone: "0997-338-662" },
-  { id: "mill-5", name: "Isaiah", operator: "Mphatso Chirwa", meterId: "37154463342", phone: "0884-559-213" },
+  { id: "mill-1", name: "Jeremiah", operator: "Nabiwi Chitsazo", meterId: "37154463253", phone: "0998-265-527", assetClass: "3-Phase Maize Mill (M1 Artery)" },
+  { id: "mill-2", name: "Solomon", operator: "Chimwemwe Banda", meterId: "37154463287", phone: "0991-442-108", assetClass: "3-Phase Maize Mill (M1 Artery)" },
+  { id: "mill-3", name: "Ezekiel", operator: "Tadala Phiri", meterId: "37154463301", phone: "0885-771-934", assetClass: "3-Phase Maize Mill (M1 Artery)" },
+  { id: "mill-4", name: "Nehemiah", operator: "Kondwani Mwale", meterId: "37154463319", phone: "0997-338-662", assetClass: "3-Phase Maize Mill (M1 Artery)" },
+  { id: "mill-5", name: "Isaiah", operator: "Mphatso Chirwa", meterId: "37154463342", phone: "0884-559-213", assetClass: "3-Phase Maize Mill (M1 Artery)" },
 ];
 
 export const generateStreakDays = (): StreakDay[] =>
@@ -51,10 +64,19 @@ export const forensicData: ForensicData = {
   signatureAlgo: "Ed25519",
   signatureStatus: "Valid",
   physicsVariance: 1.2,
-  trustScore: 98.2,
+  trustScore: 84,
   bpsAdjustment: -500,
   leverageCap: 3.5,
-  institutionalGrade: "Tier 1",
+  institutionalGrade: "Commercial",
+  // v2.4.1
+  secRange: [0.038, 0.042],
+  currentSEC: 0.0395,
+  ear: 92.3,
+  earGap: 7.7,
+  systemState: "UNDER REVIEW",
+  trustTier: "COMMERCIAL",
+  ntpOffset: 2.3,
+  lastCalibration: "2026-03-28",
 };
 
 export const verifiedEvents: VerifiedEvent[] = [
@@ -82,3 +104,21 @@ export const energyVsCashData = [
   { hour: "20:00", kwh: 46.2, cash: 62370 },
   { hour: "22:00", kwh: 43.9, cash: 59265 },
 ];
+
+export function getTrustTierColor(tier: TrustTier): string {
+  switch (tier) {
+    case "INSTITUTIONAL": return "text-[hsl(var(--sovereign))]";
+    case "COMMERCIAL": return "text-[hsl(var(--under-review))]";
+    case "SUBPRIME": return "text-[hsl(var(--gap-detected))]";
+    case "HIGH RISK": return "text-destructive";
+  }
+}
+
+export function getSystemStateColor(state: SystemState): string {
+  switch (state) {
+    case "VERIFIED": return "text-[hsl(var(--sovereign))]";
+    case "UNDER REVIEW": return "text-[hsl(var(--under-review))]";
+    case "COMPROMISED": return "text-[hsl(var(--gap-detected))]";
+    case "SUSPENDED": return "text-destructive";
+  }
+}
