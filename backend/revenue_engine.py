@@ -1171,7 +1171,7 @@ def get_last_cycle_adherence(mill_id: str, session) -> float:
         float: Adherence in range [0, 1]. Defaults to 1.0 for new mills.
                Returns DISPUTED_ADHERENCE_PENALTY (0.0) for disputed cycles.
     """
-    from backend.init_db import TokenAllocation, CashReceipt
+    from scripts.init_db import TokenAllocation, CashReceipt
     from backend.config import DISPUTED_ADHERENCE_PENALTY
     
     last = session.exec(
@@ -1216,7 +1216,7 @@ def get_last_cycle_lag(mill_id: str, session) -> float:
         float: Lag in hours. Conservative fallback (72h) for DISPUTED cycles
                or missing receipts.
     """
-    from backend.init_db import TokenAllocation, CashReceipt
+    from scripts.init_db import TokenAllocation, CashReceipt
     from backend.config import CONSERVATIVE_LAG_HOURS
     
     last = session.exec(

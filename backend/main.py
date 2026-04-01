@@ -9,6 +9,9 @@ from backend.api_reports import (
 )
 from typing import Optional
 import os
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+import logging
 
 app = FastAPI()
 
@@ -156,3 +159,33 @@ def admin_resolve_dispute(
             raise HTTPException(status_code=400, detail=result["error"])
     
     return result
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BACKGROUND SCHEDULER — Missing Cycle Detection
+# ─────────────────────────────────────────────────────────────────────────────
+
+scheduler = BackgroundScheduler()
+logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+def start_scheduler():
+    """Start APScheduler for background jobs (detect_missing_cycles every 24 hours)."""
+    from backend.cycle_manager import detect_missing_cycles
+    
+    scheduler.add_job(
+        func=detect_missing_cycles,
+        trigger=IntervalTrigger(hours=24),
+        id="detect_missing_cycles",
+        name="Detect missing cycles (PENDING > 48h)",
+        replace_existing=True
+    )
+    scheduler.start()
+    logger.info("APScheduler started: detect_missing_cycles job scheduled (every 24 hours)")
+
+
+@app.on_event("shutdown")
+def stop_scheduler():
+    """Stop APScheduler on application shutdown."""
+    scheduler.shutdown()
+    logger.info("APScheduler stopped")

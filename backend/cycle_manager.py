@@ -13,6 +13,7 @@ from backend.enforcement_engine import EnforcementEngine
 from backend.temporal_guard import TemporalGuard, TemporalWarning, TemporalBreach
 from backend.revenue_engine import get_last_cycle_adherence, get_last_cycle_lag
 from backend.policy_execution_engine import compute_per_cycle_advance_rate
+from backend.trust_scorecard import TrustScorecardGenerator
 from backend.config import BASE_ADVANCE_RATE
 
 
@@ -567,10 +568,38 @@ def issue_token(
             raise FiduciaryLockError(
                 "Cannot issue token: mill is in RED/BLOCKED fiduciary state. Manual clearance required."
             )
-        # fallback path: allow with manual clearance, but preserve carefully
 
     if not can_purchase_token(mill_id) and cycle_status != "BLOCKED":
         raise FiduciaryLockError("Cannot issue token: previous cycle is not reconciled.")
+
+    # Gate 2: Check per-cycle advance rate — block if zero (dispute or missing cycle)
+    with Session(engine) as session:
+        try:
+            trust_scorecard = TrustScorecardGenerator(mill_id)
+            today = datetime.now(timezone.utc)
+            scorecard_result = trust_scorecard.generate_daily_scorecard(today)
+            trust_score = scorecard_result["kpis"]["trust_integrity_score"]
+            advance_rate = evaluate_mill_capital(mill_id, trust_score, session)
+            
+            if advance_rate == 0.0:
+                logger.warning(
+                    f"Token issuance blocked for {mill_id}: advance_rate=0.0 "
+                    f"(possible dispute or missing cycle). Manual review required."
+                )
+                raise FiduciaryLockError(
+                    "Cannot issue token: advance rate is 0.0 (possible dispute or missing cycle). "
+                    "Contact administrator for dispute resolution."
+                )
+            
+            logger.info(
+                f"Token issuance authorized for {mill_id}: advance_rate={advance_rate:.2%}, "
+                f"trust_score={trust_score:.1f}"
+            )
+        except FiduciaryLockError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to evaluate capital for {mill_id}: {e}")
+            raise FiduciaryLockError(f"Token issuance aborted: capital evaluation failed: {e}") from e
 
     with Session(engine) as session:
         token = TokenPurchase(
