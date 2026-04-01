@@ -106,6 +106,62 @@ evaluate_mill_capital(mill_id, trust_score, session)
 
 ---
 
+## Scheduler Timing & Missing Cycle Detection
+
+**Current Configuration**:
+```python
+MISSING_CYCLE_TIMEOUT_HOURS = 48          # Mark PENDING as MISSING after 48h
+detect_missing_cycles() scheduler interval = 24 hours
+```
+
+### Grace Period Analysis
+
+**Worst-Case Detection Timeline**:
+```
+Cycle allocated:     T = 0h    (operator receives allocation)
+  ↓
+Scheduler run 1:     T = 24h   (may miss: still within 48h window)
+  ↓
+Scheduler run 2:     T = 48h   (operator now at timeout boundary)
+  ↓
+Scheduler run 3:     T = 72h   (operator marked MISSING, 24h after timeout)
+  
+EFFECTIVE GRACE PERIOD: 72 hours (3 days)
+  - 48h timeout + 24h until next scheduler run (worst case)
+```
+
+**Capital Impact**:
+- Allocation marked MISSING after 72h without receipt
+- Next cycle advance rate drops to 0.0 (via CONSERVATIVE_LAG_HOURS penalty)
+- Operator faces complete capital freeze on next cycle
+
+### Business Decision Required
+
+This is a **conscious operational trade-off**:
+
+| Duration | Pros | Cons |
+|----------|------|------|
+| **Current (72h effective)** | ✓ Scheduled jobs cheaper than continuous polling | ⚠ Operator gets 3-day grace before penalty applies |
+| **Alternative (6-hour runs)** | ✓ Detection within ~30h | ✗ Scheduler runs 4× more frequently, higher compute cost |
+| **Alternative (per-receipt webhook)** | ✓ Immediate on receipt = instant detection | ✗ Requires operator tech integration |
+
+**Question for Operator Relationship Owner**:
+> Given NABIWI's operational rhythm, is a maximum 72-hour detection grace period acceptable? Or do we need to escalate to 6-hour scheduler runs to tighten enforcement?
+
+**Current Assumption**: 72 hours is acceptable for NABIWI (typical cycle completion within 24–36h).  
+**Requires Verification Before Deployment**: Confirm with operator contact.
+
+If <72h is required, update [backend/main.py](backend/main.py#L178) scheduler interval:
+```python
+# Current:
+trigger=IntervalTrigger(hours=24)
+
+# Alternative (tighter):
+trigger=IntervalTrigger(hours=6)
+```
+
+---
+
 ## What's Not Yet Wired (Operational Checklist)
 
 ### ✅ Code Complete

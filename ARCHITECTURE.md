@@ -1304,10 +1304,17 @@ Where:
 
 **Deployment Checklist**:
 
-- [ ] Wire `detect_missing_cycles()` to scheduler trigger
-- [ ] Call `evaluate_mill_capital()` in capital allocation flow
-- [ ] Update capital calculation logic to use per-cycle rate instead of static rate
-- [ ] Backtest against historical allocations to verify penalty application
+- [x] Wire `detect_missing_cycles()` to scheduler trigger (24h interval in main.py)
+- [x] Call `evaluate_mill_capital()` in capital allocation flow (wired into issue_token)
+- [x] Update capital calculation logic to use per-cycle rate instead of static rate
+- [x] All syntax validated (pylance passes all 6 modified files)
+- [x] Gate threshold safe from floating-point errors: `advance_rate <= 0.0` (not `== 0.0`)
+- [x] All import paths consistent: `scripts.init_db` (not `backend.init_db`)
+- [x] All query helpers have required imports (select() imported where used)
+- ⚠️ **BUSINESS DECISION REQUIRED**: Confirm 72-hour maximum grace period acceptable
+  - Current: Scheduler runs every 24h, timeout is 48h → worst-case detection 72h
+  - Alternative: Run scheduler every 6h → detection within ~30h
+  - See [PER_CYCLE_ALLOCATION_REFERENCE.md: Scheduler Timing](PER_CYCLE_ALLOCATION_REFERENCE.md#scheduler-timing--missing-cycle-detection)
 - [ ] Monitor first 30 days of MISSING/DISPUTED rate distribution
 - ✅ No exception committees, no lender discretion inside the execution boundary
 
