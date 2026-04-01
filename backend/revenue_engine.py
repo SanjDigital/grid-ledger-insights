@@ -1152,6 +1152,63 @@ class RevenueGateway:
             "cao": cao.to_dict(),
             "treasury_result": treasury_result,
         }
+    
+    @staticmethod
+    def _evaluate_policy(pxe_input: PXEInput, policy: Policy) -> tuple:
+        """
+        Evaluate policy rules against PXEInput.
+        
+        Returns: (decision, advance_rate, capital_state)
+        """
+        context = asdict(pxe_input)
+        
+        for rule in policy.rules:
+            conditions = rule.get("conditions", [])
+            
+            if not conditions:  # Default rule
+                return (
+                    rule.get("decision", "DECLINE"),
+                    rule.get("advance_rate", 0.0),
+                    rule.get("capital_state", "FROZEN"),
+                )
+            
+            # Check all conditions (AND logic)
+            match = all(
+                RevenueGateway._check_condition(condition, context)
+                for condition in conditions
+            )
+            
+            if match:
+                return (
+                    rule.get("decision", "DECLINE"),
+                    rule.get("advance_rate", 0.0),
+                    rule.get("capital_state", "FROZEN"),
+                )
+        
+        # Fallback (should not reach if policies well-formed)
+        return ("DECLINE", 0.0, "FROZEN")
+    
+    @staticmethod
+    def _check_condition(condition: tuple, context: Dict[str, Any]) -> bool:
+        """Evaluate a single condition: (field, operator, value)."""
+        field, operator, expected = condition
+        actual = context.get(field)
+        
+        if actual is None:
+            return False
+        
+        if operator == ">=":
+            return actual >= expected
+        elif operator == "<=":
+            return actual <= expected
+        elif operator == ">":
+            return actual > expected
+        elif operator == "<":
+            return actual < expected
+        elif operator == "==":
+            return actual == expected
+        else:
+            return False
 
 
 # ============================================================================
@@ -1249,60 +1306,3 @@ def get_last_cycle_lag(mill_id: str, session) -> float:
     # Closed but no receipt: assume worst lag
     logger.warning(f"Closed allocation {last.id} for mill {mill_id} has no cash receipt")
     return CONSERVATIVE_LAG_HOURS
-    
-    @staticmethod
-    def _evaluate_policy(pxe_input: PXEInput, policy: Policy) -> tuple:
-        """
-        Evaluate policy rules against PXEInput.
-        
-        Returns: (decision, advance_rate, capital_state)
-        """
-        context = asdict(pxe_input)
-        
-        for rule in policy.rules:
-            conditions = rule.get("conditions", [])
-            
-            if not conditions:  # Default rule
-                return (
-                    rule.get("decision", "DECLINE"),
-                    rule.get("advance_rate", 0.0),
-                    rule.get("capital_state", "FROZEN"),
-                )
-            
-            # Check all conditions (AND logic)
-            match = all(
-                RevenueGateway._check_condition(condition, context)
-                for condition in conditions
-            )
-            
-            if match:
-                return (
-                    rule.get("decision", "DECLINE"),
-                    rule.get("advance_rate", 0.0),
-                    rule.get("capital_state", "FROZEN"),
-                )
-        
-        # Fallback (should not reach if policies well-formed)
-        return ("DECLINE", 0.0, "FROZEN")
-    
-    @staticmethod
-    def _check_condition(condition: tuple, context: Dict[str, Any]) -> bool:
-        """Evaluate a single condition: (field, operator, value)."""
-        field, operator, expected = condition
-        actual = context.get(field)
-        
-        if actual is None:
-            return False
-        
-        if operator == ">=":
-            return actual >= expected
-        elif operator == "<=":
-            return actual <= expected
-        elif operator == ">":
-            return actual > expected
-        elif operator == "<":
-            return actual < expected
-        elif operator == "==":
-            return actual == expected
-        else:
-            return False
