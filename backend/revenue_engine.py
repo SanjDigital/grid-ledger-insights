@@ -1173,6 +1173,7 @@ def get_last_cycle_adherence(mill_id: str, session) -> float:
     """
     from scripts.init_db import TokenAllocation, CashReceipt
     from backend.config import DISPUTED_ADHERENCE_PENALTY
+    from sqlmodel import select
     
     last = session.exec(
         select(TokenAllocation).where(
@@ -1218,6 +1219,7 @@ def get_last_cycle_lag(mill_id: str, session) -> float:
     """
     from scripts.init_db import TokenAllocation, CashReceipt
     from backend.config import CONSERVATIVE_LAG_HOURS
+    from sqlmodel import select
     
     last = session.exec(
         select(TokenAllocation).where(

@@ -581,13 +581,13 @@ def issue_token(
             trust_score = scorecard_result["kpis"]["trust_integrity_score"]
             advance_rate = evaluate_mill_capital(mill_id, trust_score, session)
             
-            if advance_rate == 0.0:
+            if advance_rate <= 0.0:
                 logger.warning(
-                    f"Token issuance blocked for {mill_id}: advance_rate=0.0 "
+                    f"Token issuance blocked for {mill_id}: advance_rate={advance_rate:.4f} "
                     f"(possible dispute or missing cycle). Manual review required."
                 )
                 raise FiduciaryLockError(
-                    "Cannot issue token: advance rate is 0.0 (possible dispute or missing cycle). "
+                    f"Cannot issue token: advance rate is {advance_rate:.4f} <= 0.0 (possible dispute or missing cycle). "
                     "Contact administrator for dispute resolution."
                 )
             

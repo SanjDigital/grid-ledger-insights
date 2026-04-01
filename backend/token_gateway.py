@@ -9,7 +9,7 @@ Implements the per-cycle token allocation control system.
 import logging
 from datetime import datetime, timezone, timedelta
 from sqlmodel import Session, select
-from backend.init_db import TokenAllocation, CashReceipt
+from scripts.init_db import TokenAllocation, CashReceipt
 from backend.config import TOLERANCE_PERCENT, DISPUTED_ADHERENCE_PENALTY, MISSING_CYCLE_TIMEOUT_HOURS
 
 logger = logging.getLogger(__name__)

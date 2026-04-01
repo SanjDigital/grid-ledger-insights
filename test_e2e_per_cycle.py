@@ -84,7 +84,8 @@ def test_e2e_allocation_with_rate_reduction():
         now = datetime.now(timezone.utc)
         allocation_1 = TokenAllocation(
             mill_id=mill_id,
-            expected_cash=advance_rate_1 * 5000.0,  # 5000 MWK available capital
+            allocated_kwh=59.9,
+            expected_revenue=advance_rate_1 * 5000.0,  # 5000 MWK available capital
             status='PENDING',
             allocated_at=now,
         )
@@ -115,12 +116,18 @@ def test_e2e_allocation_with_rate_reduction():
         
         # STEP 4: Resolve the missing cycle (admin marks it DISPUTED then CLOSED)
         print("\n[STEP 4] Resolving missing cycle...")
-        # First mark as DISPUTED (simulate dispute detection)
+        # First create a CashReceipt record (simulating operator remittance)
         allocation_1 = session.get(TokenAllocation, allocation_1_id)
         allocation_1.status = 'DISPUTED'
-        session.add(allocation_1)
+        receipt = CashReceipt(
+            allocation_id=allocation_1_id,
+            amount=allocation_1.expected_revenue * 0.95,  # 95% of expected
+            received_at=datetime.now(timezone.utc),
+            verified=False  # Will be set to True on resolution
+        )
+        session.add(receipt)
         session.commit()
-        print(f"  Allocation 1 marked DISPUTED (simulating admin action)")
+        print(f"  CashReceipt created for allocation 1: amount={receipt.amount:.2f} MWK")
         
         # Then resolve to CLOSED
         resolve_result = resolve_dispute(
@@ -160,14 +167,15 @@ def test_e2e_allocation_with_rate_reduction():
         # Create second allocation
         allocation_2 = TokenAllocation(
             mill_id=mill_id,
-            expected_cash=advance_rate_2 * 5000.0,
+            allocated_kwh=59.9,
+            expected_revenue=advance_rate_2 * 5000.0,
             status='PENDING',
             allocated_at=datetime.now(timezone.utc),
         )
         session.add(allocation_2)
         session.commit()
         allocation_2_id = allocation_2.id
-        print(f"  Allocation 2 created: id={allocation_2_id}, status=PENDING, expected_cash={advance_rate_2 * 5000:.2f} MWK")
+        print(f"  Allocation 2 created: id={allocation_2_id}, status=PENDING, expected_revenue={advance_rate_2 * 5000:.2f} MWK")
         
         # STEP 6: Verify state machine
         print("\n[STEP 6] Verifying state machine...")
@@ -219,7 +227,8 @@ def test_advance_rate_gate_blocks_zero_rate():
         
         disputed_alloc = TokenAllocation(
             mill_id=mill_id,
-            expected_cash=1000.0,
+            allocated_kwh=59.9,
+            expected_revenue=1000.0,
             status='DISPUTED',  # Disputed = zero advance rate
             allocated_at=old_time,
         )
