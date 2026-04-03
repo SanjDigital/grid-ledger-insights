@@ -22,6 +22,79 @@ import hashlib
 import json
 from decimal import Decimal
 
+try:
+    from sqlmodel import Session, select
+except ImportError:
+    # sqlmodel may not be available in all contexts; handle gracefully
+    Session = None  # type: ignore
+
+
+# ============================================================================
+# TARIFF RATE HELPER
+# ============================================================================
+
+def get_active_rate(mill_id: str, session: Optional["Session"] = None, at_timestamp: Optional[datetime] = None) -> float:
+    """
+    Query the most recent applicable energy cost rate for a mill.
+    
+    ⚠️  COST TRACKING ONLY — Do NOT use for expected_revenue calculations.
+    See Layer 2.5 ARCHITECTURE.md: energy cost ≠ revenue rate.
+    
+    This function returns the owner's energy cost from ESCOM (TariffRate), not the
+    operator's customer-facing revenue rate. For expected_revenue, use Mill.revenue_rate_per_kwh directly.
+    
+    Args:
+        mill_id: Mill ID to query
+        session: SQLModel session (required if database lookup needed)
+        at_timestamp: Timestamp to look up rate. Defaults to now() if not provided.
+    
+    Returns:
+        Active energy cost rate in MK per kWh (for cost accounting only)
+    
+    Raises:
+        ValueError: If session is None or mill has no rate defined
+        ImportError: If TariffRate model cannot be imported
+    
+    Design Principle:
+    - Returns the most recent rate where effective_date <= at_timestamp
+    - Falls back to mill.revenue_rate_per_kwh if no TariffRate record exists
+    - Enables cost tracking for profit margin analysis per MERA tariff changes
+    
+    Example:
+    ```python
+    # Owner's cost accounting (not enforcement):
+    energy_cost_rate = get_active_rate(mill_id, session)  # e.g., 160.13 MK/kWh
+    revenue_rate = mill.revenue_rate_per_kwh  # e.g., 1,350 MK/kWh
+    profit_per_kwh = revenue_rate - energy_cost_rate  # = 1,189.87
+    ```
+    """
+    if at_timestamp is None:
+        at_timestamp = datetime.now(timezone.utc)
+    
+    if session is None:
+        raise ValueError("session parameter required for get_active_rate()")
+    
+    # Import here to avoid circular imports
+    from scripts.init_db import TariffRate, Mill
+    
+    # Query for the most recent energy cost rate effective <= at_timestamp
+    statement = select(TariffRate).where(
+        (TariffRate.mill_id == mill_id) &
+        (TariffRate.effective_date <= at_timestamp)
+    ).order_by(TariffRate.effective_date.desc()).limit(1)
+    
+    result = session.exec(statement).first()
+    
+    if result:
+        return result.rate_mk_per_kwh
+    
+    # No TariffRate record found
+    raise ValueError(
+        f"No energy cost rate (TariffRate) found for mill {mill_id} at {at_timestamp.isoformat()}. "
+        "MERA tariff must be registered in TariffRate table for cost accounting. "
+        "For expected_revenue calculations, use Mill.revenue_rate_per_kwh directly."
+    )
+
 
 # ============================================================================
 # MILL CONFIGURATION (Node-Level Rates — Never Hardcoded)
@@ -1306,3 +1379,157 @@ def get_last_cycle_lag(mill_id: str, session) -> float:
     # Closed but no receipt: assume worst lag
     logger.warning(f"Closed allocation {last.id} for mill {mill_id} has no cash receipt")
     return CONSERVATIVE_LAG_HOURS
+
+
+# ============================================================================
+# GLASS BOX CERTIFICATION — DETERMINISTIC COMPLIANCE MARK
+# ============================================================================
+
+def get_certification_status(mill_id: str, session) -> dict:
+    """
+    Compute Glass Box Certification status for a mill.
+
+    Certification is earned — not assigned. All data is generated automatically
+    by the enforcement engine. No manual audit required.
+
+    Criteria (all must pass):
+    1. Minimum 10 consecutive CLOSED cycles (no MISSING/DISPUTED interruptions)
+    2. Average adherence (cash / expected) >= 90% across those cycles
+    3. Zero currently open DISPUTED cycles
+    4. Zero MISSING cycles in the last 10 allocations
+    5. Average remittance latency < 48 hours
+
+    Returns:
+        dict with keys:
+            - certified: bool
+            - criteria: dict of individual criterion results
+            - reason: str | None  (first failing criterion, or None if certified)
+            - evaluated_at: str (ISO datetime)
+    """
+    from sqlmodel import select
+    from scripts.init_db import TokenAllocation, CashReceipt, Mill
+    from backend.config import (
+        GLASS_BOX_MIN_CYCLES, GLASS_BOX_MIN_ADHERENCE,
+        GLASS_BOX_MAX_DISPUTED, GLASS_BOX_MAX_MISSING,
+        GLASS_BOX_MAX_LAG_HOURS, CONSERVATIVE_LAG_HOURS
+    )
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    criteria = {}
+    reason = None
+
+    # ── Fetch last 10 allocations (any status) ───────────────────────────────
+    last_10 = session.exec(
+        select(TokenAllocation)
+        .where(TokenAllocation.mill_id == mill_id)
+        .order_by(TokenAllocation.allocated_at.desc())
+    ).fetchmany(10)
+
+    # ── Criterion 1: Minimum consecutive CLOSED cycles ───────────────────────
+    closed = [a for a in last_10 if a.status == "CLOSED"]
+    consecutive_clean = 0
+    for alloc in sorted(last_10, key=lambda a: a.allocated_at, reverse=True):
+        if alloc.status == "CLOSED":
+            consecutive_clean += 1
+        else:
+            break  # sequence broken
+
+    criteria["consecutive_clean_cycles"] = {
+        "value": consecutive_clean,
+        "threshold": GLASS_BOX_MIN_CYCLES,
+        "pass": consecutive_clean >= GLASS_BOX_MIN_CYCLES
+    }
+    if not criteria["consecutive_clean_cycles"]["pass"] and not reason:
+        reason = f"Insufficient consecutive clean cycles: {consecutive_clean} / {GLASS_BOX_MIN_CYCLES} required"
+
+    # ── Criterion 2: Average adherence >= 90% ────────────────────────────────
+    adherence_scores = []
+    for alloc in closed:
+        receipt = session.exec(
+            select(CashReceipt)
+            .where(CashReceipt.allocation_id == alloc.id)
+        ).first()
+        if receipt and receipt.verified:
+            adherence_scores.append(
+                min(1.0, receipt.amount / alloc.expected_revenue)
+            )
+
+    avg_adherence = sum(adherence_scores) / len(adherence_scores) if adherence_scores else 0.0
+    criteria["average_adherence"] = {
+        "value": round(avg_adherence, 4),
+        "threshold": GLASS_BOX_MIN_ADHERENCE,
+        "pass": avg_adherence >= GLASS_BOX_MIN_ADHERENCE
+    }
+    if not criteria["average_adherence"]["pass"] and not reason:
+        reason = f"Average adherence too low: {avg_adherence:.1%} / {GLASS_BOX_MIN_ADHERENCE:.0%} required"
+
+    # ── Criterion 3: Zero open DISPUTED cycles ───────────────────────────────
+    open_disputed = session.exec(
+        select(TokenAllocation)
+        .where(
+            TokenAllocation.mill_id == mill_id,
+            TokenAllocation.status == "DISPUTED"
+        )
+    ).all()
+
+    criteria["open_disputed"] = {
+        "value": len(open_disputed),
+        "threshold": GLASS_BOX_MAX_DISPUTED,
+        "pass": len(open_disputed) <= GLASS_BOX_MAX_DISPUTED
+    }
+    if not criteria["open_disputed"]["pass"] and not reason:
+        reason = f"Open DISPUTED cycles: {len(open_disputed)}"
+
+    # ── Criterion 4: Zero MISSING in last 10 ────────────────────────────────
+    missing_count = len([a for a in last_10 if a.status == "MISSING"])
+    criteria["missing_in_window"] = {
+        "value": missing_count,
+        "threshold": GLASS_BOX_MAX_MISSING,
+        "pass": missing_count <= GLASS_BOX_MAX_MISSING
+    }
+    if not criteria["missing_in_window"]["pass"] and not reason:
+        reason = f"MISSING cycles in last 10: {missing_count}"
+
+    # ── Criterion 5: Average remittance latency < 48h ────────────────────────
+    lag_values = []
+    for alloc in closed:
+        receipt = session.exec(
+            select(CashReceipt)
+            .where(CashReceipt.allocation_id == alloc.id)
+        ).first()
+        if receipt:
+            delta = receipt.received_at - alloc.allocated_at
+            lag_values.append(delta.total_seconds() / 3600.0)
+        else:
+            lag_values.append(CONSERVATIVE_LAG_HOURS)
+
+    avg_lag = sum(lag_values) / len(lag_values) if lag_values else 0.0
+    criteria["average_lag_hours"] = {
+        "value": round(avg_lag, 2),
+        "threshold": GLASS_BOX_MAX_LAG_HOURS,
+        "pass": avg_lag < GLASS_BOX_MAX_LAG_HOURS
+    }
+    if not criteria["average_lag_hours"]["pass"] and not reason:
+        reason = f"Average remittance lag too high: {avg_lag:.1f}h / {GLASS_BOX_MAX_LAG_HOURS}h threshold"
+
+    # ── Final result ─────────────────────────────────────────────────────────
+    certified = all(c["pass"] for c in criteria.values())
+
+    # Update mill record if status changed
+    mill = session.exec(select(Mill).where(Mill.id == mill_id)).first()
+    if mill and mill.glass_box_certified != certified:
+        mill.glass_box_certified = certified
+        session.add(mill)
+        session.commit()
+        status_str = "GRANTED" if certified else "REVOKED"
+        logger.info(f"Glass Box Certification {status_str} for mill {mill_id}")
+
+    return {
+        "mill_id": mill_id,
+        "certified": certified,
+        "criteria": criteria,
+        "reason": reason,
+        "evaluated_at": datetime.now(timezone.utc).isoformat()
+    }

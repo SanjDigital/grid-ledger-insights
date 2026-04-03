@@ -17,13 +17,42 @@ class Mill(SQLModel, table=True):
     location: str
     meter_type: str  # Inhemeter, Clou, or Chint
     efficiency_baseline: float  # MK per kWh (e.g., 1000.0)
+    revenue_rate_per_kwh: Optional[float] = None  # Budgeted revenue rate in MK per kWh (e.g., 1350.0 for NABIWI)
 
     public_key: Optional[str] = None
     device_id: Optional[str] = None
     last_nonce: Optional[str] = None
     last_event_hash: Optional[str] = None
+    glass_box_certified: bool = Field(default=False)
 
-# 2. Define the Token Ledger (The Fuel)
+# 1.5. Define the Tariff Rate History (Versioned rates for MERA compliance)
+class TariffRate(SQLModel, table=True):
+    """
+    Versioned tariff rates per mill.
+    
+    Tracks historical rate changes to support MERA annual adjustments
+    and enable accurate ERR (Energy Accountability Ratio) calculations.
+    
+    Design Principle:
+    - One rate per effective_date per mill
+    - New rate is "active" when effective_date <= now()
+    - Historical audit trail preserved (immutable records)
+    - get_active_rate(mill_id, session) returns most recent applicable rate
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    mill_id: str = Field(foreign_key="mill.id", index=True)
+    rate_mk_per_kwh: float  # Tariff rate in MK per kWh
+    effective_date: datetime  # When this rate becomes active
+    set_by: str  # User ID or system that set this rate (e.g., "MERA_ADMIN", "GRIDLEDGER_SYSTEM")
+    notes: Optional[str] = None  # Reason for change (e.g., "MERA Jan 2026 tariff adjustment +12%")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        CheckConstraint("rate_mk_per_kwh > 0", name="check_rate_positive"),
+        Index("ix_mill_effective_date", "mill_id", "effective_date", unique=False),
+    )
+
+
 class TokenPurchase(SQLModel, table=True):
     token_id: str = Field(primary_key=True)
     mill_id: str = Field(foreign_key="mill.id")

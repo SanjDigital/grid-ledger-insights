@@ -1,5 +1,5 @@
 # GridLedger Verification Protocol
-Status: v2.7 (Capital Controls, EAR Tiers, Forensic Baselines, Capital at Risk, Trust Scorecard Implemented)  
+Status: v2.8 (Capital Controls, EAR Tiers, Forensic Baselines, Capital at Risk, Trust Scorecard, Versioned Tariff Rates Implemented)  
 Authority: FL00R G3N3RAL
 
 ---
@@ -85,6 +85,126 @@ Layer 2 validates continuity, not semantic truth. A perfectly consistent but fab
 
 - will pass all Layer 2 checks
 - will appear operationally valid
+
+### Layer 2.5: Energy Cost Tracking (TariffRate System) (**implemented**)
+
+**Purpose**:
+
+- Track owner's energy cost from ESCOM (for profit margin analysis)
+- Support MERA tariff adjustments in owner's financial models
+- Enable cost reconciliation per ESCOM invoices
+- **NOT** used in per-cycle enforcement logic
+
+**Critical Distinction**:
+
+GridLedger's enforcement uses two distinct rates that must never be conflated:
+
+| Rate | Field | Example | Purpose | Used By |
+|------|-------|---------|---------|---------|
+| **Revenue Rate** | `Mill.revenue_rate_per_kwh` | 1,350 MK/kWh (Nabiwi) | What operator charges customers | `allocate_token()` → `expected_revenue` |
+| **Energy Cost** | `TariffRate.rate_mk_per_kwh` | 160.13 MK/kWh (MERA Jan 2026) | What owner pays ESCOM | Owner's P&L, cost accounting |
+
+**Why the Distinction Matters**:
+
+- Owner buys energy from ESCOM at the MERA tariff (K160.13/kWh)
+- Owner agrees with operator on a fixed customer-facing rate (e.g., K1,350/kWh)
+- Margin = (1,350 − 160.13) × kWh = profit or loss per cycle
+- If enforcement used energy cost instead of revenue rate, `expected_revenue` would be understated by ~88%, breaking Grid Ledger's verification logic
+
+**Problem Example** (Before fixing):
+
+```
+NABIWI revenue rate agreement: K1,350/kWh
+ESCOM energy cost: K160.13/kWh
+
+WRONG (using energy cost):
+  expected_revenue = 59.9 kWh × K160.13 = K9,592
+  actual_revenue = K80,955 (operator paid per agreement)
+  adherence = 80,955 / 9,592 = 844% (system thinks operator stole cash!)
+
+CORRECT (using revenue rate):
+  expected_revenue = 59.9 kWh × K1,350 = K80,865
+  actual_revenue = K80,955
+  adherence = 80,955 / 80,865 = 100.1% (normal, within tolerance)
+```
+
+#### 3.0a Tariff Rate Model (TariffRate table) – Cost Tracking Only
+
+Immutable append-only ledger of historical **owner energy costs** (not used in enforcement):
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `mill_id` | string | Which location (owner's cost tracking) |
+| `rate_mk_per_kwh` | float | ESCOM tariff rate in MK per kWh |
+| `effective_date` | datetime | When MERA tariff becomes active |
+| `set_by` | string | Admin identifier (e.g., "MERA_ADMIN") |
+| `notes` | string (optional) | Reason: "MERA Jan 2026 adjustment +12%" |
+| `created_at` | datetime | Record creation timestamp |
+
+**Usage**: Cost accounting, P&L analysis, MERA tariff tracking (owner's operational finance).  
+**NOT used**: Per-cycle enforcement, adherence calculations, expected revenue.
+
+#### 3.0b Revenue Rate Model – Mill.revenue_rate_per_kwh
+
+Static per-mill field in the `Mill` model:
+
+```python
+class Mill(SQLModel, table=True):
+    id: str  # e.g., "NABIWI_NRID"
+    # ...
+    revenue_rate_per_kwh: float  # e.g., 1,350.0 for Nabiwi
+```
+
+**Properties**:
+- Set by owner–operator agreement (e.g., "operator will charge customers K1,350 per kWh")
+- **Static** (not versioned like TariffRate) because it's a contractual obligation
+- Changes only when owner and operator renegotiate the customer-facing price
+- **Directly used** in all enforcement calculations: `expected_revenue = allocated_kwh × revenue_rate_per_kwh`
+
+#### 3.0c Enforcement Integration
+
+**Expected Revenue Calculation** (backend/token_gateway.py):
+
+```python
+# CORRECT: Use revenue_rate_per_kwh (what operator charges customers)
+mill = session.get(Mill, mill_id)
+allocated_kwh = 59.9
+expected_revenue = allocated_kwh * mill.revenue_rate_per_kwh  # e.g., 59.9 * 1,350 = 80,865
+
+allocation = TokenAllocation(
+    mill_id=mill_id,
+    allocated_kwh=allocated_kwh,
+    expected_revenue=expected_revenue,  # Now accurate for adherence verification
+    status="PENDING"
+)
+```
+
+**EAR & Adherence Calculations**:
+
+All downstream metrics depend on correct `expected_revenue`:
+- Energy Accountability Ratio: EAR = reported_kwh / metered_kwh (independent of rates)
+- Revenue Ratio: actual_revenue / expected_revenue (uses revenue_rate_per_kwh)
+- Glass Box adherence: Requires expected_revenue to be per-operator-agreement, not ESCOM cost basis
+
+#### 3.0d MERA Tariff Tracking (Cost Accounting, Phase 2)
+
+When MERA announces a new tariff (e.g., K160.13 effective Jan 1, 2026):
+
+1. **Log in TariffRate** (for owner's cost tracking):
+   ```sql
+   INSERT INTO tariff_rates (mill_id, rate_mk_per_kwh, effective_date, set_by, notes)
+   VALUES ('NABIWI_NRID', 160.13, '2026-01-01T00:00:00Z', 'MERA_ADMIN', 'MERA Jan 2026 adjustment');
+   ```
+
+2. **Do NOT change Mill.revenue_rate_per_kwh** — that's the operator agreement, not affected by ESCOM's cost changes.
+
+3. **Owner's cost accounting** can query TariffRate to compute profit margins for quarters/years:
+   ```python
+   # Owner profit per cycle = (revenue_rate - energy_cost) × kWh
+   profit = (mill.revenue_rate_per_kwh - tariff_rate.rate_mk_per_kwh) * 59.9
+   ```
+
+**Key Principle**: TariffRate is informational for owner accounting; it never affects the operator's enforced obligations.
 
 ### Layer 3: Economic & physical verification layer
 
