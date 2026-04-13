@@ -29,9 +29,11 @@ export interface VerifiedEvent {
   currency: string;
   verification: "sovereign" | "review" | "gap" | "floor-verified";
   anomalies?: AnomalyFlag[];
-  tokenPurchaseTimestamp?: string; // for Leading Day detection
-  isPeakHour?: boolean; // 08:00-17:00 CAT
-  revenueUplift?: number; // % vs baseline, for M1 Corridor
+  tokenPurchaseTimestamp?: string;
+  isPeakHour?: boolean;
+  revenueUplift?: number;
+  yieldKg: number; // actual grain output measured by scale
+  meteredKwh: number; // external meter reading (Layer 4 authority)
 }
 
 export type SystemState = "VERIFIED" | "UNDER REVIEW" | "COMPROMISED" | "SUSPENDED";
@@ -92,14 +94,14 @@ export const forensicData: ForensicData = {
 };
 
 export const verifiedEvents: VerifiedEvent[] = [
-  { id: "evt-001", timestamp: "2024-03-15 14:32:07", tokenId: "TKN-9A3F2", kwh: 59.9, reportedCash: 80865, currency: "K", verification: "sovereign", isPeakHour: true, revenueUplift: 16.2 },
-  { id: "evt-002", timestamp: "2024-03-15 13:18:42", tokenId: "TKN-8B2E1", kwh: 61.2, reportedCash: 82621, currency: "K", verification: "floor-verified", isPeakHour: true, revenueUplift: 14.8 },
-  { id: "evt-003", timestamp: "2024-03-15 12:05:19", tokenId: "TKN-7C1D0", kwh: 58.4, reportedCash: 78840, currency: "K", verification: "sovereign", isPeakHour: true, revenueUplift: 3.1, anomalies: [{ type: "m1-corridor", label: "M1 CORRIDOR", detail: "Revenue uplift 3.1% vs expected 15% — deviation flagged" }] },
-  { id: "evt-004", timestamp: "2024-03-15 10:47:33", tokenId: "TKN-6D0C9", kwh: 63.7, reportedCash: 85995, currency: "K", verification: "review", isPeakHour: true, revenueUplift: 15.4, tokenPurchaseTimestamp: "2024-03-14 16:20:00", anomalies: [{ type: "leading-day", label: "LEADING DAY", detail: "Token purchased Day T, first report Day T+1 — reporting delay detected" }] },
-  { id: "evt-005", timestamp: "2024-03-15 09:22:51", tokenId: "TKN-5E9B8", kwh: 57.1, reportedCash: 77085, currency: "K", verification: "floor-verified", isPeakHour: true, revenueUplift: 15.1 },
-  { id: "evt-006", timestamp: "2024-03-15 08:11:06", tokenId: "TKN-4F8A7", kwh: 60.5, reportedCash: 81675, currency: "K", verification: "sovereign", isPeakHour: true, revenueUplift: 14.9 },
-  { id: "evt-007", timestamp: "2024-01-02 23:55:44", tokenId: "TKN-3G7Z6", kwh: 55.8, reportedCash: 75330, currency: "K", verification: "gap", isPeakHour: false, anomalies: [{ type: "holiday-heist", label: "HOLIDAY HEIST", detail: "Energy consumed on public holiday (Jan 2) with no production event" }] },
-  { id: "evt-008", timestamp: "2024-03-14 22:40:12", tokenId: "TKN-2H6Y5", kwh: 62.3, reportedCash: 84105, currency: "K", verification: "sovereign", isPeakHour: false, revenueUplift: 2.1 },
+  { id: "evt-001", timestamp: "2024-03-15 14:32:07", tokenId: "TKN-9A3F2", kwh: 59.9, reportedCash: 80865, currency: "K", verification: "sovereign", isPeakHour: true, revenueUplift: 16.2, yieldKg: 1510, meteredKwh: 64.2 },
+  { id: "evt-002", timestamp: "2024-03-15 13:18:42", tokenId: "TKN-8B2E1", kwh: 61.2, reportedCash: 82621, currency: "K", verification: "floor-verified", isPeakHour: true, revenueUplift: 14.8, yieldKg: 1540, meteredKwh: 66.1 },
+  { id: "evt-003", timestamp: "2024-03-15 12:05:19", tokenId: "TKN-7C1D0", kwh: 58.4, reportedCash: 78840, currency: "K", verification: "sovereign", isPeakHour: true, revenueUplift: 3.1, yieldKg: 1480, meteredKwh: 63.0, anomalies: [{ type: "m1-corridor", label: "M1 CORRIDOR", detail: "Revenue uplift 3.1% vs expected 15% — deviation flagged" }] },
+  { id: "evt-004", timestamp: "2024-03-15 10:47:33", tokenId: "TKN-6D0C9", kwh: 63.7, reportedCash: 85995, currency: "K", verification: "review", isPeakHour: true, revenueUplift: 15.4, yieldKg: 1420, meteredKwh: 68.9, tokenPurchaseTimestamp: "2024-03-14 16:20:00", anomalies: [{ type: "leading-day", label: "LEADING DAY", detail: "Token purchased Day T, first report Day T+1 — reporting delay detected" }] },
+  { id: "evt-005", timestamp: "2024-03-15 09:22:51", tokenId: "TKN-5E9B8", kwh: 57.1, reportedCash: 77085, currency: "K", verification: "floor-verified", isPeakHour: true, revenueUplift: 15.1, yieldKg: 1460, meteredKwh: 61.5 },
+  { id: "evt-006", timestamp: "2024-03-15 08:11:06", tokenId: "TKN-4F8A7", kwh: 60.5, reportedCash: 81675, currency: "K", verification: "sovereign", isPeakHour: true, revenueUplift: 14.9, yieldKg: 1525, meteredKwh: 65.3 },
+  { id: "evt-007", timestamp: "2024-01-02 23:55:44", tokenId: "TKN-3G7Z6", kwh: 55.8, reportedCash: 75330, currency: "K", verification: "gap", isPeakHour: false, yieldKg: 0, meteredKwh: 60.2, anomalies: [{ type: "holiday-heist", label: "HOLIDAY HEIST", detail: "Energy consumed on public holiday (Jan 2) with no production event" }] },
+  { id: "evt-008", timestamp: "2024-03-14 22:40:12", tokenId: "TKN-2H6Y5", kwh: 62.3, reportedCash: 84105, currency: "K", verification: "sovereign", isPeakHour: false, revenueUplift: 2.1, yieldKg: 1570, meteredKwh: 67.4 },
 ];
 
 export const energyVsCashData = [
