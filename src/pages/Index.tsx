@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { mills, generateStreakDays, forensicData, verifiedEvents } from "@/lib/mock-data";
+import { computeForensics } from "@/lib/forensic-engine";
 import { AssetSidebar } from "@/components/dashboard/AssetSidebar";
 import { StreakHeader } from "@/components/dashboard/StreakHeader";
 import { AuditPanel } from "@/components/dashboard/AuditPanel";
@@ -13,10 +14,22 @@ const Index = () => {
   const [varianceOverride, setVarianceOverride] = useState<number | null>(null);
   const streakDays = useMemo(() => generateStreakDays(), []);
 
-  const currentForensic = useMemo(() => ({
+  const baseForensic = useMemo(() => ({
     ...forensicData,
     physicsVariance: varianceOverride ?? forensicData.physicsVariance,
   }), [varianceOverride]);
+
+  const computed = useMemo(() => computeForensics(verifiedEvents, baseForensic), [baseForensic]);
+
+  const currentForensic = useMemo(() => ({
+    ...baseForensic,
+    currentSEC: computed.currentSEC,
+    ear: computed.ear,
+    earGap: computed.earGap,
+    systemState: computed.systemState,
+    trustTier: computed.trustTier,
+    trustScore: computed.trustScore,
+  }), [baseForensic, computed]);
 
   const isRedAlert = currentForensic.physicsVariance > 2.0;
 
@@ -44,7 +57,7 @@ const Index = () => {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <AuditPanel data={currentForensic} isRedAlert={isRedAlert} />
+            <AuditPanel data={currentForensic} isRedAlert={isRedAlert} perEventForensics={computed.perEvent} />
             <div className="space-y-5">
               <EnergyChart />
               <YieldEfficiencyChart />
