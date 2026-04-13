@@ -1,14 +1,16 @@
 import { type ForensicData } from "@/lib/mock-data";
+import { type EventForensics } from "@/lib/forensic-engine";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TrustGauge } from "./TrustGauge";
-import { Lock, FileCheck, Cpu, TrendingDown, Shield, Landmark, Clock, Gauge, BarChart3 } from "lucide-react";
+import { Lock, FileCheck, Cpu, TrendingDown, Shield, Landmark, Clock, Gauge, BarChart3, AlertTriangle } from "lucide-react";
 
 interface AuditPanelProps {
   data: ForensicData;
   isRedAlert: boolean;
+  perEventForensics?: EventForensics[];
 }
 
-export function AuditPanel({ data, isRedAlert }: AuditPanelProps) {
+export function AuditPanel({ data, isRedAlert, perEventForensics = [] }: AuditPanelProps) {
   const varianceColor = data.physicsVariance > 2.0
     ? "text-destructive"
     : data.physicsVariance > 1.5
@@ -17,7 +19,8 @@ export function AuditPanel({ data, isRedAlert }: AuditPanelProps) {
 
   const secInRange = data.currentSEC >= data.secRange[0] && data.currentSEC <= data.secRange[1];
   const earHealthy = data.ear <= 100;
-  const ntpHealthy = data.ntpOffset <= 300; // 5 minutes in seconds
+  const ntpHealthy = data.ntpOffset <= 300;
+  const secBreaches = perEventForensics.filter(e => e.secBreach !== null);
 
   return (
     <div className="card-terminal animate-slide-up">
@@ -98,6 +101,24 @@ export function AuditPanel({ data, isRedAlert }: AuditPanelProps) {
                 {secInRange ? "✓ IN RANGE" : "✗ PHYSICS BREACH"}
               </span>
             </div>
+            {secBreaches.length > 0 && (
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <AlertTriangle className="w-3 h-3 text-destructive" />
+                  <span className="text-[10px] font-mono text-destructive font-semibold">
+                    {secBreaches.length} EVENT{secBreaches.length > 1 ? "S" : ""} WITH SEC BREACH
+                  </span>
+                </div>
+                {secBreaches.map(b => (
+                  <div key={b.eventId} className="flex items-center gap-2 pl-4">
+                    <span className="text-[9px] font-mono text-muted-foreground">{b.eventId}</span>
+                    <span className={`text-[9px] font-mono font-semibold ${b.secBreach === "high" ? "text-[hsl(var(--under-review))]" : "text-destructive"}`}>
+                      {b.sec?.toFixed(4)} kWh/kg — {b.secBreach === "high" ? "Ghost Idling" : "Data Manipulation"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* L3-4 — Physics Variance */}
@@ -131,7 +152,7 @@ export function AuditPanel({ data, isRedAlert }: AuditPanelProps) {
             </div>
             <div className="flex items-center gap-2 mt-1.5">
               <span className={`text-[10px] font-mono font-semibold ${data.earGap > 5 ? "text-[hsl(var(--under-review))]" : "text-primary"}`}>
-                {data.earGap}% GAP
+                {data.earGap.toFixed(1)}% GAP
               </span>
               {data.earGap > 5 && (
                 <span className="text-[9px] font-mono text-[hsl(var(--under-review))]">
