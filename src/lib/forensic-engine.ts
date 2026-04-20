@@ -17,6 +17,22 @@ export interface EnforcementVerdict {
   canOverride: boolean;
 }
 
+export type LayerStatus = "aligned" | "conflict" | "missing";
+
+export interface AuthorityLayer {
+  id: "escom" | "airtel" | "operator";
+  name: string;
+  role: string;
+  status: LayerStatus;
+  detail: string;
+}
+
+export interface AuthorityAlignment {
+  layers: AuthorityLayer[];
+  overall: "aligned" | "conflict";
+  lastEventId: string | null;
+}
+
 export interface ComputedForensics {
   currentSEC: number;
   secBreaches: EventForensics[];
@@ -27,6 +43,7 @@ export interface ComputedForensics {
   trustScore: number;
   perEvent: EventForensics[];
   enforcement: EnforcementVerdict;
+  authority: AuthorityAlignment;
 }
 
 const SEC_RANGE: [number, number] = [0.038, 0.042];
