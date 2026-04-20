@@ -17,6 +17,22 @@ export interface EnforcementVerdict {
   canOverride: boolean;
 }
 
+export type LayerStatus = "aligned" | "conflict" | "missing";
+
+export interface AuthorityLayer {
+  id: "escom" | "airtel" | "operator";
+  name: string;
+  role: string;
+  status: LayerStatus;
+  detail: string;
+}
+
+export interface AuthorityAlignment {
+  layers: AuthorityLayer[];
+  overall: "aligned" | "conflict";
+  lastEventId: string | null;
+}
+
 export interface ComputedForensics {
   currentSEC: number;
   secBreaches: EventForensics[];
@@ -27,6 +43,7 @@ export interface ComputedForensics {
   trustScore: number;
   perEvent: EventForensics[];
   enforcement: EnforcementVerdict;
+  authority: AuthorityAlignment;
 }
 
 const SEC_RANGE: [number, number] = [0.038, 0.042];
@@ -155,6 +172,81 @@ export function computeForensics(
     };
   }
 
+  // Authority alignment — last cycle truth hierarchy
+  // ESCOM = root (token + metered kWh), Airtel = settlement (reportedCash), Operator = SMS report (reported kwh + yieldKg)
+  const authority: AuthorityAlignment = (() => {
+    if (!last) {
+      return {
+        lastEventId: null,
+        overall: "conflict",
+        layers: [
+          { id: "escom", name: "ESCOM Meter", role: "Root of truth · tamper-proof", status: "missing", detail: "No cycle on record" },
+          { id: "airtel", name: "Airtel Money", role: "Settlement layer", status: "missing", detail: "No settlement reference" },
+          { id: "operator", name: "Operator Logs", role: "Conditional · only if aligned", status: "missing", detail: "No SMS report received" },
+        ],
+      };
+    }
+
+    // ESCOM: token must exist and metered reading must be present & non-zero
+    const escomOk = !!last.tokenId && last.meteredKwh > 0;
+    // Airtel: settlement cash recorded for the cycle
+    const airtelOk = last.reportedCash > 0 && last.verification !== "gap";
+    // Operator: SMS report must align with metered authority (within EAR tolerance) AND yield reported when energy consumed
+    const lastEar = last.meteredKwh > 0 ? (last.kwh / last.meteredKwh) * 100 : 0;
+    const operatorAligned =
+      last.verification !== "gap" &&
+      lastEar >= 90 &&
+      lastEar <= 110 &&
+      !(last.kwh > 0 && last.yieldKg === 0);
+
+    const escomLayer: AuthorityLayer = {
+      id: "escom",
+      name: "ESCOM Meter",
+      role: "Root of truth · tamper-proof",
+      status: escomOk ? "aligned" : "conflict",
+      detail: escomOk
+        ? `Token ${last.tokenId} · ${last.meteredKwh.toFixed(1)} kWh metered`
+        : "Missing token or zero metered reading",
+    };
+
+    const airtelLayer: AuthorityLayer = {
+      id: "airtel",
+      name: "Airtel Money",
+      role: "Settlement layer",
+      status: airtelOk ? "aligned" : "conflict",
+      detail: airtelOk
+        ? `${last.currency} ${last.reportedCash.toLocaleString()} settled`
+        : last.verification === "gap"
+        ? "ESCOM token consumed but no Airtel receipt"
+        : "No settlement record",
+    };
+
+    const operatorLayer: AuthorityLayer = {
+      id: "operator",
+      name: "Operator Logs",
+      role: "Conditional · only if aligned",
+      status: !escomOk
+        ? "missing"
+        : operatorAligned
+        ? "aligned"
+        : "conflict",
+      detail: !escomOk
+        ? "Cannot validate — root layer in conflict"
+        : last.verification === "gap"
+        ? "SMS report missing — 48h reconciliation breach"
+        : last.kwh > 0 && last.yieldKg === 0
+        ? "Energy reported with zero yield — Holiday Heist signature"
+        : lastEar < 90 || lastEar > 110
+        ? `Reported ${last.kwh.toFixed(1)} kWh vs metered ${last.meteredKwh.toFixed(1)} kWh (${lastEar.toFixed(1)}%)`
+        : `Aligned within tolerance (${lastEar.toFixed(1)}% EAR)`,
+    };
+
+    const layers = [escomLayer, airtelLayer, operatorLayer];
+    const overall = layers.some(l => l.status === "conflict") ? "conflict" : "aligned";
+
+    return { layers, overall, lastEventId: last.id };
+  })();
+
   return {
     currentSEC,
     secBreaches,
@@ -165,5 +257,6 @@ export function computeForensics(
     trustScore,
     perEvent,
     enforcement,
+    authority,
   };
 }

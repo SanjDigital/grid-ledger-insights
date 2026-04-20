@@ -7,6 +7,7 @@ import { AuditPanel } from "@/components/dashboard/AuditPanel";
 import { LiveDataFeed } from "@/components/dashboard/LiveDataFeed";
 import { EnergyChart } from "@/components/dashboard/EnergyChart";
 import { YieldEfficiencyChart } from "@/components/dashboard/YieldEfficiencyChart";
+import { AuthorityStackPanel } from "@/components/dashboard/AuthorityStackPanel";
 import type { Mill } from "@/lib/mock-data";
 
 const Index = () => {
@@ -59,6 +60,7 @@ const Index = () => {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <AuditPanel data={currentForensic} isRedAlert={isRedAlert} perEventForensics={computed.perEvent} enforcement={computed.enforcement} />
             <div className="space-y-5">
+              <AuthorityStackPanel alignment={computed.authority} />
               <EnergyChart />
               <YieldEfficiencyChart />
             </div>
