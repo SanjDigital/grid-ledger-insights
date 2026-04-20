@@ -1,7 +1,7 @@
 import { mills, type Mill, forensicData, getSystemStateColor, getTrustTierColor } from "@/lib/mock-data";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Activity } from "lucide-react";
-import gridledgerIcon from "@/assets/GridLedger_icon_512px.png";
+import brandAsset from "@/assets/brand_asset.webp";
 
 interface AssetSidebarProps {
   selectedMill: Mill;
@@ -14,15 +14,9 @@ export function AssetSidebar({ selectedMill, onSelectMill }: AssetSidebarProps) 
 
   return (
     <aside className="w-72 border-r border-border bg-card flex flex-col shrink-0">
-      {/* Logo */}
-      <div className="p-5 border-b border-border">
-        <div className="flex items-center gap-2.5">
-          <img src={gridledgerIcon} alt="GridLedger" className="w-8 h-8 rounded" />
-          <div>
-            <h1 className="text-sm font-semibold tracking-tight text-foreground">GridLedger</h1>
-            <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Verification Protocol</p>
-          </div>
-        </div>
+      {/* Brand Banner */}
+      <div className="p-4 border-b border-border bg-secondary/20">
+        <img src={brandAsset} alt="GridLedger Enforcement Protocol" className="w-full h-auto rounded shadow-sm" />
       </div>
 
       {/* Asset Selector */}
