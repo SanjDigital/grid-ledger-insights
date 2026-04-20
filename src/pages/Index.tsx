@@ -8,11 +8,13 @@ import { LiveDataFeed } from "@/components/dashboard/LiveDataFeed";
 import { EnergyChart } from "@/components/dashboard/EnergyChart";
 import { YieldEfficiencyChart } from "@/components/dashboard/YieldEfficiencyChart";
 import { AuthorityStackPanel } from "@/components/dashboard/AuthorityStackPanel";
-import type { Mill } from "@/lib/mock-data";
+import { EventDetailDrawer } from "@/components/dashboard/EventDetailDrawer";
+import type { Mill, VerifiedEvent } from "@/lib/mock-data";
 
 const Index = () => {
   const [selectedMill, setSelectedMill] = useState<Mill>(mills[0]);
   const [varianceOverride, setVarianceOverride] = useState<number | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<VerifiedEvent | null>(null);
   const streakDays = useMemo(() => generateStreakDays(), []);
 
   const baseForensic = useMemo(() => ({
@@ -66,7 +68,15 @@ const Index = () => {
             </div>
           </div>
 
-          <LiveDataFeed events={verifiedEvents} />
+          <LiveDataFeed events={verifiedEvents} onSelectEvent={setSelectedEvent} />
+
+          <EventDetailDrawer
+            event={selectedEvent}
+            forensic={selectedEvent ? computed.perEvent.find(p => p.eventId === selectedEvent.id) ?? null : null}
+            baseForensic={currentForensic}
+            open={!!selectedEvent}
+            onOpenChange={(o) => { if (!o) setSelectedEvent(null); }}
+          />
 
           {/* Disclaimer */}
           <footer className="pt-4 pb-2 border-t border-border">

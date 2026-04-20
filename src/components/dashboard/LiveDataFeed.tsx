@@ -6,6 +6,7 @@ import { AlertTriangle, Calendar, Clock, TrendingDown } from "lucide-react";
 
 interface LiveDataFeedProps {
   events: VerifiedEvent[];
+  onSelectEvent?: (event: VerifiedEvent) => void;
 }
 
 const ANOMALY_CONFIG: Record<AnomalyType, { icon: typeof AlertTriangle; colorClass: string; bgClass: string; borderClass: string }> = {
@@ -31,7 +32,7 @@ const ANOMALY_CONFIG: Record<AnomalyType, { icon: typeof AlertTriangle; colorCla
 
 type FilterKey = AnomalyType | "all";
 
-export function LiveDataFeed({ events }: LiveDataFeedProps) {
+export function LiveDataFeed({ events, onSelectEvent }: LiveDataFeedProps) {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
 
   const anomalyCounts = events.reduce<Record<AnomalyType, number>>(
@@ -122,10 +123,11 @@ export function LiveDataFeed({ events }: LiveDataFeedProps) {
                 return (
                   <TableRow
                     key={evt.id}
-                    className={`border-border transition-colors duration-150 ${
+                    onClick={() => onSelectEvent?.(evt)}
+                    className={`border-border transition-colors duration-150 cursor-pointer ${
                       hasAnomaly
-                        ? "hover:bg-destructive/5 bg-destructive/[0.02]"
-                        : "hover:bg-secondary/30"
+                        ? "hover:bg-destructive/10 bg-destructive/[0.02]"
+                        : "hover:bg-secondary/40"
                     }`}
                   >
                     <TableCell className="font-mono text-xs tabular text-muted-foreground py-2.5">
