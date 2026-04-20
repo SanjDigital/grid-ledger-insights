@@ -3,7 +3,8 @@ import { type EventForensics, type EnforcementVerdict } from "@/lib/forensic-eng
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TrustGauge } from "./TrustGauge";
 import { EnforcementPanel } from "./EnforcementPanel";
-import { Lock, FileCheck, Cpu, TrendingDown, Shield, Landmark, Clock, Gauge, BarChart3, AlertTriangle } from "lucide-react";
+import { useAuditTrail } from "./AuditTrailContext";
+import { Lock, FileCheck, Cpu, TrendingDown, Shield, Landmark, Clock, Gauge, BarChart3, AlertTriangle, History } from "lucide-react";
 
 interface AuditPanelProps {
   data: ForensicData;
@@ -13,6 +14,8 @@ interface AuditPanelProps {
 }
 
 export function AuditPanel({ data, isRedAlert, perEventForensics = [], enforcement }: AuditPanelProps) {
+  const { actions, latestRootHash } = useAuditTrail();
+
   const varianceColor = data.physicsVariance > 2.0
     ? "text-destructive"
     : data.physicsVariance > 1.5
@@ -33,6 +36,7 @@ export function AuditPanel({ data, isRedAlert, perEventForensics = [], enforceme
               { value: "forensic", label: "Forensic L0-4", icon: Cpu },
               { value: "trust", label: "Trust L5", icon: Shield },
               { value: "capital", label: "Capital L6", icon: Landmark },
+              { value: "audit", label: "Audit Trail", icon: History },
             ].map(t => (
               <TabsTrigger
                 key={t.value}
@@ -69,7 +73,7 @@ export function AuditPanel({ data, isRedAlert, perEventForensics = [], enforceme
               <Lock className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">L1 · Root Hash (SHA-256)</span>
             </div>
-            <p className="font-mono text-sm text-foreground break-all">{data.rootHash}</p>
+            <p className="font-mono text-sm text-foreground break-all">{latestRootHash}</p>
           </div>
 
           {/* L1 — Signature */}
@@ -168,7 +172,7 @@ export function AuditPanel({ data, isRedAlert, perEventForensics = [], enforceme
         <TabsContent value="trust" className="p-4 mt-0">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
             <TrustGauge score={data.trustScore} isRedAlert={isRedAlert} />
-            {enforcement && <EnforcementPanel verdict={enforcement} isOwner />}
+            {enforcement && <EnforcementPanel verdict={enforcement} isOwner currentRootHash={latestRootHash} />}
           </div>
         </TabsContent>
 
@@ -197,6 +201,39 @@ export function AuditPanel({ data, isRedAlert, perEventForensics = [], enforceme
               {isRedAlert ? "DECLINE / HIGH RISK" : data.trustTier === "INSTITUTIONAL" ? "APPROVE / INVESTMENT GRADE" : "CONDITIONAL / UNDER REVIEW"}
             </p>
           </div>
+        </TabsContent>
+
+        <TabsContent value="audit" className="p-4 mt-0 space-y-3 max-h-[400px] overflow-y-auto scrollbar-terminal">
+          {actions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+              <History className="w-8 h-8 mb-2 opacity-20" />
+              <p className="text-xs font-mono">No actions recorded in audit trail</p>
+            </div>
+          ) : (
+            actions.map((action) => (
+              <div key={action.id} className="p-3 rounded bg-secondary/30 border border-border space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                    action.type === 'override' ? 'border-destructive/30 text-destructive bg-destructive/5' : 
+                    action.type === 'review_request' ? 'border-under-review/30 text-under-review bg-under-review/5' : 
+                    'border-primary/30 text-primary bg-primary/5'
+                  }`}>
+                    {action.type.toUpperCase().replace('_', ' ')}
+                  </span>
+                  <span className="text-[9px] font-mono text-muted-foreground">{action.timestamp}</span>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-mono text-foreground font-semibold">Cycle: {action.tokenId}</p>
+                  <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">{action.reason}</p>
+                </div>
+                <div className="pt-2 border-t border-border/50">
+                  <p className="text-[8px] font-mono text-muted-foreground tracking-tighter truncate">
+                    ANCHOR HASH: {action.rootHash}
+                  </p>
+                </div>
+              </div>
+            ))
+          )}
         </TabsContent>
       </Tabs>
     </div>

@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Check, X, AlertTriangle, Flag } from "lucide-react";
 import type { VerifiedEvent, ForensicData } from "@/lib/mock-data";
 import type { EventForensics } from "@/lib/forensic-engine";
+import { useAuditTrail } from "./AuditTrailContext";
 
 interface EventDetailDrawerProps {
   event: VerifiedEvent | null;
@@ -48,6 +49,7 @@ function statusBadge(status: LayerStatus): string {
 
 export function EventDetailDrawer({ event, forensic, baseForensic, open, onOpenChange }: EventDetailDrawerProps) {
   const { toast } = useToast();
+  const { recordAction, latestRootHash } = useAuditTrail();
 
   if (!event) return null;
 
@@ -57,6 +59,15 @@ export function EventDetailDrawer({ event, forensic, baseForensic, open, onOpenC
   const cashGap = Math.max(0, Math.round(event.kwh * 1350) - event.reportedCash); // expected cash heuristic
   const earLocal = event.meteredKwh > 0 ? (event.kwh / event.meteredKwh) * 100 : 0;
   const cashOk = event.verification !== "gap" && event.reportedCash > 0;
+
+  const handleReportDiscrepancy = () => {
+    recordAction("discrepancy_report", event.tokenId, "Manual discrepancy report filed by operator", latestRootHash);
+    toast({
+      title: "Discrepancy reported",
+      description: `Event ${event.tokenId} flagged for auditor review. Audit trail updated.`,
+    });
+    onOpenChange(false);
+  };
 
   const layers: LayerCheck[] = [
     {
@@ -189,35 +200,26 @@ export function EventDetailDrawer({ event, forensic, baseForensic, open, onOpenC
               {rootHash}
             </code>
             <p className="font-mono text-[10px] text-muted-foreground">
-              Signed with {baseForensic.signatureAlgo} · anchored to chain root <span className="text-foreground/70">{baseForensic.rootHash}</span>
+              Signed with {baseForensic.signatureAlgo} · anchored to chain root <span className="text-foreground/70">{latestRootHash}</span>
             </p>
           </div>
         </section>
 
         {/* Actions */}
         <section className="p-5 flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1 font-mono text-xs"
+          <button
+            className="flex-1 px-4 py-2 rounded bg-secondary hover:bg-secondary/80 border border-border text-xs font-mono text-foreground transition-colors"
             onClick={() => onOpenChange(false)}
           >
             Close
-          </Button>
-          <Button
-            size="sm"
-            className="flex-1 font-mono text-xs gap-1.5"
-            onClick={() => {
-              toast({
-                title: "Discrepancy reported",
-                description: `Event ${event.tokenId} flagged for auditor review.`,
-              });
-              onOpenChange(false);
-            }}
+          </button>
+          <button
+            className="flex-1 px-4 py-2 rounded bg-destructive/10 hover:bg-destructive/20 border border-destructive/30 text-xs font-mono text-destructive flex items-center justify-center gap-2 transition-colors"
+            onClick={handleReportDiscrepancy}
           >
             <Flag className="w-3 h-3" />
             Report discrepancy
-          </Button>
+          </button>
         </section>
       </SheetContent>
     </Sheet>

@@ -7,11 +7,13 @@ import { AuditPanel } from "@/components/dashboard/AuditPanel";
 import { LiveDataFeed } from "@/components/dashboard/LiveDataFeed";
 import { EnergyChart } from "@/components/dashboard/EnergyChart";
 import { YieldEfficiencyChart } from "@/components/dashboard/YieldEfficiencyChart";
+import { ReconciliationTimeline } from "@/components/dashboard/ReconciliationTimeline";
 import { AuthorityStackPanel } from "@/components/dashboard/AuthorityStackPanel";
 import { EventDetailDrawer } from "@/components/dashboard/EventDetailDrawer";
+import { AuditTrailProvider } from "@/components/dashboard/AuditTrailContext";
 import type { Mill, VerifiedEvent } from "@/lib/mock-data";
 
-const Index = () => {
+const IndexContent = () => {
   const [selectedMill, setSelectedMill] = useState<Mill>(mills[0]);
   const [varianceOverride, setVarianceOverride] = useState<number | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<VerifiedEvent | null>(null);
@@ -63,8 +65,9 @@ const Index = () => {
             <AuditPanel data={currentForensic} isRedAlert={isRedAlert} perEventForensics={computed.perEvent} enforcement={computed.enforcement} />
             <div className="space-y-5">
               <AuthorityStackPanel alignment={computed.authority} />
-              <EnergyChart />
-              <YieldEfficiencyChart />
+              <ReconciliationTimeline events={verifiedEvents} />
+              <EnergyChart events={verifiedEvents} />
+              <YieldEfficiencyChart events={verifiedEvents} currentSEC={computed.currentSEC} />
             </div>
           </div>
 
@@ -87,6 +90,14 @@ const Index = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const Index = () => {
+  return (
+    <AuditTrailProvider initialRootHash={forensicData.rootHash}>
+      <IndexContent />
+    </AuditTrailProvider>
   );
 };
 

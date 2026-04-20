@@ -2,11 +2,14 @@ import { useState } from "react";
 import { CheckCircle2, AlertCircle, ShieldOff, ShieldCheck, FileSearch } from "lucide-react";
 import type { EnforcementVerdict, NextTokenState } from "@/lib/forensic-engine";
 import { useToast } from "@/hooks/use-toast";
+import { useAuditTrail } from "./AuditTrailContext";
 
 interface EnforcementPanelProps {
   verdict: EnforcementVerdict;
   /** Owner role unlocks override action on BLOCKED state */
   isOwner?: boolean;
+  /** Current root hash to anchor the audit trail action */
+  currentRootHash: string;
 }
 
 const STATE_CONFIG: Record<NextTokenState, {
@@ -47,8 +50,9 @@ const STATE_CONFIG: Record<NextTokenState, {
   },
 };
 
-export function EnforcementPanel({ verdict, isOwner = true }: EnforcementPanelProps) {
+export function EnforcementPanel({ verdict, isOwner = true, currentRootHash }: EnforcementPanelProps) {
   const { toast } = useToast();
+  const { recordAction } = useAuditTrail();
   const [overridden, setOverridden] = useState(false);
   const cfg = STATE_CONFIG[verdict.state];
   const Icon = cfg.icon;
@@ -56,11 +60,13 @@ export function EnforcementPanel({ verdict, isOwner = true }: EnforcementPanelPr
   const handleAction = () => {
     if (verdict.state === "BLOCKED" && isOwner && verdict.canOverride) {
       setOverridden(true);
+      recordAction("override", verdict.lastEventId ?? "asset", verdict.reason, currentRootHash);
       toast({
         title: "Override approved",
         description: `Next token issuance unlocked for ${verdict.lastEventId ?? "asset"}. Audit trail recorded.`,
       });
     } else {
+      recordAction("review_request", verdict.lastEventId ?? "asset", verdict.reason, currentRootHash);
       toast({
         title: "Review requested",
         description: "Forensic review queued. Floor team will be dispatched within the next cycle.",

@@ -3,40 +3,41 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from "recharts";
+import { VerifiedEvent } from "@/lib/mock-data";
 
-const generateYieldData = () => {
-  const data = [];
-  for (let day = 1; day <= 30; day++) {
-    const energy = 59.9;
-    // Yield starts strong then drops after day 20 to show leakage
-    let yield_kg: number;
-    if (day <= 18) {
-      yield_kg = 48 + Math.random() * 4; // ~48-52 kg, healthy
-    } else if (day <= 22) {
-      yield_kg = 44 - (day - 18) * 2.5 + Math.random() * 2; // declining
-    } else {
-      yield_kg = 28 + Math.random() * 5; // low plateau ~28-33 kg
-    }
-    yield_kg = Math.round(yield_kg * 10) / 10;
-    data.push({ day: `D${day}`, energy, yield_kg });
-  }
-  return data;
-};
+interface YieldEfficiencyChartProps {
+  events: VerifiedEvent[];
+  currentSEC: number;
+}
 
 const LEAKAGE_THRESHOLD = 40;
 
-export function YieldEfficiencyChart() {
-  const data = useMemo(() => generateYieldData(), []);
+export function YieldEfficiencyChart({ events, currentSEC }: YieldEfficiencyChartProps) {
+  const chartData = useMemo(() => {
+    return [...events]
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+      .map((e, i) => ({
+        day: `C${i + 1}`,
+        energy: e.kwh,
+        yield_kg: e.yieldKg,
+        tokenId: e.tokenId
+      }));
+  }, [events]);
 
   const enriched = useMemo(
     () =>
-      data.map((d) => ({
+      chartData.map((d) => ({
         ...d,
         yieldHealthy: d.yield_kg >= LEAKAGE_THRESHOLD ? d.yield_kg : LEAKAGE_THRESHOLD,
         yieldLeakage: d.yield_kg < LEAKAGE_THRESHOLD ? d.yield_kg : LEAKAGE_THRESHOLD,
       })),
-    [data],
+    [chartData],
   );
+
+  const currentEfficiency = currentSEC > 0 ? (1 / currentSEC) : 0;
+  // Variance from a nominal baseline of 0.040 kWh/kg (25 kg/kWh)
+  const baselineEfficiency = 25; 
+  const variance = baselineEfficiency > 0 ? ((currentEfficiency - baselineEfficiency) / baselineEfficiency) * 100 : 0;
 
   return (
     <div className="card-terminal animate-slide-up">
@@ -44,7 +45,7 @@ export function YieldEfficiencyChart() {
         <div>
           <h3 className="text-sm font-semibold text-foreground">Yield Efficiency</h3>
           <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
-            30-day energy vs. actual yield — correlation gap analysis
+            Production cycles energy vs. actual yield — correlation gap analysis
           </p>
         </div>
         <div className="flex items-center gap-4 text-[10px] font-mono">
@@ -67,12 +68,14 @@ export function YieldEfficiencyChart() {
       <div className="px-4 py-3 border-b border-border flex items-center gap-6 bg-secondary/30">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Current Efficiency</span>
-          <span className="text-sm font-mono font-bold text-foreground tabular-nums">12.1 kg/kWh</span>
+          <span className="text-sm font-mono font-bold text-foreground tabular-nums">{currentEfficiency.toFixed(1)} kg/kWh</span>
         </div>
         <span className="w-px h-4 bg-border" />
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Variance from Baseline</span>
-          <span className="text-sm font-mono font-bold text-[hsl(var(--gap-detected))] tabular-nums">-0.4%</span>
+          <span className={`text-sm font-mono font-bold tabular-nums ${variance < 0 ? "text-destructive" : "text-sovereign"}`}>
+            {variance > 0 ? "+" : ""}{variance.toFixed(1)}%
+          </span>
         </div>
       </div>
       <div className="p-4">
@@ -98,11 +101,10 @@ export function YieldEfficiencyChart() {
               tick={{ fontSize: 9, fill: "hsl(240,5%,50%)", fontFamily: "JetBrains Mono" }}
               axisLine={{ stroke: "hsl(240,4%,16%)" }}
               tickLine={false}
-              interval={4}
             />
             <YAxis
               yAxisId="energy"
-              domain={[0, 80]}
+              domain={[0, 'auto']}
               tick={{ fontSize: 10, fill: "hsl(240,5%,50%)", fontFamily: "JetBrains Mono" }}
               axisLine={false}
               tickLine={false}
@@ -111,7 +113,7 @@ export function YieldEfficiencyChart() {
             <YAxis
               yAxisId="yield"
               orientation="right"
-              domain={[0, 70]}
+              domain={[0, 'auto']}
               tick={{ fontSize: 10, fill: "hsl(240,5%,50%)", fontFamily: "JetBrains Mono" }}
               axisLine={false}
               tickLine={false}
@@ -128,9 +130,9 @@ export function YieldEfficiencyChart() {
               }}
               labelStyle={{ color: "hsl(240,5%,50%)" }}
               formatter={(value: number, name: string) => {
-                if (name === "energy") return [`${value} kWh`, "Energy"];
-                if (name === "yieldHealthy") return [`${value} kg`, "Yield"];
-                if (name === "yieldLeakage") return [`${value} kg`, "⚠ Leakage Zone"];
+                if (name === "energy") return [`${value.toFixed(1)} kWh`, "Energy"];
+                if (name === "yieldHealthy") return [`${value.toFixed(1)} kg`, "Yield"];
+                if (name === "yieldLeakage") return [`${value.toFixed(1)} kg`, "⚠ Leakage Zone"];
                 return [value, name];
               }}
             />
@@ -141,7 +143,6 @@ export function YieldEfficiencyChart() {
               strokeDasharray="4 4"
               strokeOpacity={0.5}
             />
-            {/* Energy flat line */}
             <Area
               yAxisId="energy"
               type="monotone"
@@ -151,7 +152,6 @@ export function YieldEfficiencyChart() {
               fill="url(#gradEnergy)"
               name="energy"
             />
-            {/* Yield healthy portion */}
             <Area
               yAxisId="yield"
               type="monotone"
@@ -161,7 +161,6 @@ export function YieldEfficiencyChart() {
               fill="url(#gradYieldOk)"
               name="yieldHealthy"
             />
-            {/* Yield leakage portion */}
             <Area
               yAxisId="yield"
               type="monotone"
