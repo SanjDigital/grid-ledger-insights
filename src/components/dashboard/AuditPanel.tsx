@@ -1,16 +1,18 @@
 import { type ForensicData } from "@/lib/mock-data";
-import { type EventForensics } from "@/lib/forensic-engine";
+import { type EventForensics, type EnforcementVerdict } from "@/lib/forensic-engine";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TrustGauge } from "./TrustGauge";
+import { EnforcementPanel } from "./EnforcementPanel";
 import { Lock, FileCheck, Cpu, TrendingDown, Shield, Landmark, Clock, Gauge, BarChart3, AlertTriangle } from "lucide-react";
 
 interface AuditPanelProps {
   data: ForensicData;
   isRedAlert: boolean;
   perEventForensics?: EventForensics[];
+  enforcement?: EnforcementVerdict;
 }
 
-export function AuditPanel({ data, isRedAlert, perEventForensics = [] }: AuditPanelProps) {
+export function AuditPanel({ data, isRedAlert, perEventForensics = [], enforcement }: AuditPanelProps) {
   const varianceColor = data.physicsVariance > 2.0
     ? "text-destructive"
     : data.physicsVariance > 1.5
@@ -164,7 +166,10 @@ export function AuditPanel({ data, isRedAlert, perEventForensics = [] }: AuditPa
         </TabsContent>
 
         <TabsContent value="trust" className="p-4 mt-0">
-          <TrustGauge score={data.trustScore} isRedAlert={isRedAlert} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+            <TrustGauge score={data.trustScore} isRedAlert={isRedAlert} />
+            {enforcement && <EnforcementPanel verdict={enforcement} isOwner />}
+          </div>
         </TabsContent>
 
         <TabsContent value="capital" className="p-4 mt-0 space-y-4">

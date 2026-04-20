@@ -57,7 +57,7 @@ const Index = () => {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <AuditPanel data={currentForensic} isRedAlert={isRedAlert} perEventForensics={computed.perEvent} />
+            <AuditPanel data={currentForensic} isRedAlert={isRedAlert} perEventForensics={computed.perEvent} enforcement={computed.enforcement} />
             <div className="space-y-5">
               <EnergyChart />
               <YieldEfficiencyChart />
