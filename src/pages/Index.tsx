@@ -7,6 +7,7 @@ import { AuditPanel } from "@/components/dashboard/AuditPanel";
 import { LiveDataFeed } from "@/components/dashboard/LiveDataFeed";
 import { EnergyChart } from "@/components/dashboard/EnergyChart";
 import { YieldEfficiencyChart } from "@/components/dashboard/YieldEfficiencyChart";
+import { AuthorityStackPanel } from "@/components/dashboard/AuthorityStackPanel";
 import type { Mill } from "@/lib/mock-data";
 
 const Index = () => {
