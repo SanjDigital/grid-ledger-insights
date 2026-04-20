@@ -7,6 +7,16 @@ export interface EventForensics {
   earContribution: { reported: number; metered: number };
 }
 
+export type NextTokenState = "CLEARED" | "CONDITIONAL" | "BLOCKED";
+
+export interface EnforcementVerdict {
+  state: NextTokenState;
+  reason: string;
+  detail: string;
+  lastEventId: string | null;
+  canOverride: boolean;
+}
+
 export interface ComputedForensics {
   currentSEC: number;
   secBreaches: EventForensics[];
@@ -16,6 +26,7 @@ export interface ComputedForensics {
   trustTier: TrustTier;
   trustScore: number;
   perEvent: EventForensics[];
+  enforcement: EnforcementVerdict;
 }
 
 const SEC_RANGE: [number, number] = [0.038, 0.042];
@@ -79,6 +90,71 @@ export function computeForensics(
   else if (trustScore >= 50) trustTier = "SUBPRIME";
   else trustTier = "HIGH RISK";
 
+  // Enforcement / Next Token derivation
+  // Inspect most recent event (events assumed sorted desc by timestamp; otherwise pick max)
+  const sorted = [...events].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const last = sorted[0] ?? null;
+  const lastForensic = last ? perEvent.find((p) => p.eventId === last.id) ?? null : null;
+
+  let enforcement: EnforcementVerdict;
+  if (baseForensic.physicsVariance > 2.0) {
+    enforcement = {
+      state: "BLOCKED",
+      reason: "Variance >2% — manual review required",
+      detail: `Physics variance ${baseForensic.physicsVariance.toFixed(1)}% exceeds 2.0% threshold. Next token issuance suspended pending site audit.`,
+      lastEventId: last?.id ?? null,
+      canOverride: true,
+    };
+  } else if (systemState === "COMPROMISED" || hasPhysicsBreach) {
+    enforcement = {
+      state: "BLOCKED",
+      reason: "Physics breach on last cycle",
+      detail: `Aggregate SEC ${currentSEC.toFixed(4)} kWh/kg outside calibration window ${SEC_RANGE[0]}–${SEC_RANGE[1]}. Next token blocked until reconciliation.`,
+      lastEventId: last?.id ?? null,
+      canOverride: true,
+    };
+  } else if (last && last.verification === "gap") {
+    enforcement = {
+      state: "BLOCKED",
+      reason: "Missing reconciliation (48h breach)",
+      detail: `Last cycle ${last.tokenId} flagged GAP — no production confirmation received. Next token blocked.`,
+      lastEventId: last.id,
+      canOverride: true,
+    };
+  } else if (lastForensic?.secBreach) {
+    enforcement = {
+      state: "CONDITIONAL",
+      reason: lastForensic.secBreach === "high" ? "Ghost Idling on last cycle" : "Data Manipulation on last cycle",
+      detail: `Last event ${last?.tokenId} SEC ${lastForensic.sec?.toFixed(4)} kWh/kg breach. Next token requires operator confirmation.`,
+      lastEventId: last?.id ?? null,
+      canOverride: false,
+    };
+  } else if (last && last.verification === "review") {
+    enforcement = {
+      state: "CONDITIONAL",
+      reason: "Last cycle UNDER REVIEW",
+      detail: `Token ${last.tokenId} pending floor verification. Next token issuance conditional on review outcome.`,
+      lastEventId: last.id,
+      canOverride: false,
+    };
+  } else if (earGap > 5) {
+    enforcement = {
+      state: "CONDITIONAL",
+      reason: `EAR gap ${earGap.toFixed(1)}% — Invisibility Layer audit`,
+      detail: `Reported energy trails metered authority by ${earGap.toFixed(1)}%. Next token conditional on reconciliation.`,
+      lastEventId: last?.id ?? null,
+      canOverride: false,
+    };
+  } else {
+    enforcement = {
+      state: "CLEARED",
+      reason: "Last cycle VERIFIED",
+      detail: `Token ${last?.tokenId ?? "—"} cleared all forensic layers. Next token approved for issuance.`,
+      lastEventId: last?.id ?? null,
+      canOverride: false,
+    };
+  }
+
   return {
     currentSEC,
     secBreaches,
@@ -88,5 +164,6 @@ export function computeForensics(
     trustTier,
     trustScore,
     perEvent,
+    enforcement,
   };
 }
