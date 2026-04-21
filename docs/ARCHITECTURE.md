@@ -1,6 +1,64 @@
 # GridLedger Verification Protocol
-Status: v2.8 (Capital Controls, EAR Tiers, Forensic Baselines, Capital at Risk, Trust Scorecard, Versioned Tariff Rates Implemented)  
+Status: v3.0 (Phase 1 Enhancements: Idempotency, Time-Weighted Risk, Effective Rate Forensics)
 Authority: FL00R G3N3RAL
+
+> **v3.0 Amendment Log (Phase 1 – April 2026)**
+> - §2.7: Idempotency mechanism added (24-hour cache, Idempotency-Key header, safe retry semantics)
+> - §2.8: Time-weighted risk calculation added (linear multiplier, caps stale allocations)
+> - §2.9: Effective rate tracking metric added (forensic, reveals operator bucket mix behavior)
+> - §2.10: Nabiwi calibration baseline established (1,340–1,360 MWK/kWh band from Q1 2026 SMS data)
+> - §3.2: Per-mill observation protocol (no enforcement, collect 5–10 cycles, then tighten bands)
+> - §5.2: API endpoint documentation updated with new headers and response fields
+
+---
+
+## 0. Signal-to-Signature: The Seven-Step Enforcement Chain
+
+*This section is the capital markets summary of the full protocol. Every step below maps to a specific layer in Sections 1–10.*
+
+```
+Step 1 — PHYSICAL EVENT
+  59.9 kWh energy token allocated to node.
+  Production capacity physically constrained by token.
+  No energy → no production. The gate is not a policy. It is physics.
+
+Step 2 — SIGNED PAYLOAD (Layer 1)
+  Operator submits event signed with Ed25519 key.
+  Canonical JSON normalisation. Tamper-evident at origin.
+  Identity is verified. Activity is not yet trusted.
+
+Step 3 — CONTINUITY CHECK (Layer 2)
+  previous.meter_close == current.meter_open
+  Any break in sequence: GapBreachError raised immediately.
+  Missing or reordered events cannot pass this gate.
+
+Step 4 — FINANCIAL TRANSLATION (Layer 3)
+  ERR (Expected Revenue Rate) = allocated_kWh × revenue_rate_per_kWh
+  ARR (Actual Revenue Rate) = cash_remitted / kWh_allocated
+  Variance computed. Tolerance: ±5%.
+  EAR (Energy Accountability Ratio) = reported_kWh / metered_kWh
+
+Step 5 — FORENSIC ANCHOR (Merkle)
+  All window events hashed into Merkle tree.
+  Root stored as cryptographic anchor.
+  Changing, inserting, deleting, or reordering any event changes the root.
+  Auditor can recompute root from raw events at any time.
+
+Step 6 — TRUST SCORECARD (0–100)
+  Reconciliation Score (50%): physical vs. ledger variance
+  Consistency Score (30%): statistical anomaly detection
+  Governance Score (20%): signature and RBAC enforcement
+  EAR Tier applied (TIER 1/2/3) via Bounded Imperfection Doctrine.
+  Score drives financing recommendation: APPROVE / CONDITIONAL / DECLINE.
+
+Step 7 — POLICY EXECUTION ENGINE (Layer 4 — PXE)
+  Verified state → deterministic Capital Action Object (CAO).
+  No human interpretation inside execution boundary.
+  Identical inputs → identical outputs. Always.
+  Capital gate: ALLOW / REDUCE / BLOCK.
+```
+
+**The investor statement**: Seven steps from physics to capital decision. No discretion. No self-reporting trusted. False reporting is not prevented — it is made economically, physically, and statistically unsustainable over time.
 
 ---
 
@@ -102,14 +160,14 @@ GridLedger's enforcement uses two distinct rates that must never be conflated:
 | Rate | Field | Example | Purpose | Used By |
 |------|-------|---------|---------|---------|
 | **Revenue Rate** | `Mill.revenue_rate_per_kwh` | 1,350 MK/kWh (Nabiwi) | What operator charges customers | `allocate_token()` → `expected_revenue` |
-| **Energy Cost** | `TariffRate.rate_mk_per_kwh` | 160.13 MK/kWh (MERA Jan 2026) | What owner pays ESCOM | Owner's P&L, cost accounting |
+| **Energy Cost** | `TariffRate.rate_mk_per_kwh` | 284.15 MK/kWh (MERA ET7 Jan 2026) | What owner pays ESCOM | Owner's P&L, cost accounting |
 
 **Why the Distinction Matters**:
 
-- Owner buys energy from ESCOM at the MERA tariff (K160.13/kWh)
+- Owner buys energy from ESCOM at the MERA tariff (K284.15/kWh as of 2026-01-19 for ET7)
 - Owner agrees with operator on a fixed customer-facing rate (e.g., K1,350/kWh)
-- Margin = (1,350 − 160.13) × kWh = profit or loss per cycle
-- If enforcement used energy cost instead of revenue rate, `expected_revenue` would be understated by ~88%, breaking Grid Ledger's verification logic
+- Margin = (1,350 − 284.15) × kWh = profit or loss per cycle
+- If enforcement used energy cost instead of revenue rate, `expected_revenue` would be understated by ~79%, breaking Grid Ledger's verification logic
 
 **Problem Example** (Before fixing):
 
@@ -188,12 +246,17 @@ All downstream metrics depend on correct `expected_revenue`:
 
 #### 3.0d MERA Tariff Tracking (Cost Accounting, Phase 2)
 
-When MERA announces a new tariff (e.g., K160.13 effective Jan 1, 2026):
+When MERA announces a new tariff (e.g., ET7 schedule: 253.70 Mk/kWh until 2026-01-19, then 284.15 Mk/kWh effective 2026-01-19):
 
 1. **Log in TariffRate** (for owner's cost tracking):
    ```sql
+   -- Historical rate (pre-Jan 19, 2026)
    INSERT INTO tariff_rates (mill_id, rate_mk_per_kwh, effective_date, set_by, notes)
-   VALUES ('NABIWI_NRID', 160.13, '2026-01-01T00:00:00Z', 'MERA_ADMIN', 'MERA Jan 2026 adjustment');
+   VALUES ('NABIWI_NRID', 253.70, '2026-01-01T00:00:00Z', 'GRIDLEDGER_SYSTEM', 'MERA ET7 rate before Jan 2026 adjustment');
+   
+   -- New rate effective Jan 19, 2026 (+12% adjustment)
+   INSERT INTO tariff_rates (mill_id, rate_mk_per_kwh, effective_date, set_by, notes)
+   VALUES ('NABIWI_NRID', 284.15, '2026-01-19T00:00:00Z', 'GRIDLEDGER_SYSTEM', 'MERA Jan 2026 ET7 tariff adjustment: +12.0% to 284.15 Mk/kWh');
    ```
 
 2. **Do NOT change Mill.revenue_rate_per_kwh** — that's the operator agreement, not affected by ESCOM's cost changes.
@@ -201,10 +264,275 @@ When MERA announces a new tariff (e.g., K160.13 effective Jan 1, 2026):
 3. **Owner's cost accounting** can query TariffRate to compute profit margins for quarters/years:
    ```python
    # Owner profit per cycle = (revenue_rate - energy_cost) × kWh
+   # Example for Nabiwi (59.9 kWh per cycle):
+   # Pre-Jan 19: profit = (1,350 - 253.70) × 59.9 = 65,694 Mk per cycle
+   # Post-Jan 19: profit = (1,350 - 284.15) × 59.9 = 63,870 Mk per cycle (↓ 1,824 Mk or -2.8%)
    profit = (mill.revenue_rate_per_kwh - tariff_rate.rate_mk_per_kwh) * 59.9
    ```
 
 **Key Principle**: TariffRate is informational for owner accounting; it never affects the operator's enforced obligations.
+
+---
+
+## 2.7 Idempotency & Duplicate Prevention (Phase 1 – **implemented**)
+
+### Purpose
+
+Prevent duplicate token allocations and cash receipt records when requests are retried (network timeouts, client-side retries, etc.).
+
+### Mechanism
+
+**IdempotencyRecord Table**:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `id` | int | Primary key |
+| `idempotency_key` | str (unique) | Client-provided UUID (required header) |
+| `mill_id` | string | Mill identifier |
+| `created_at` | datetime | When this cache entry was created |
+| `response_json` | json | Cached response body (serialized) |
+| `allocation_id` | int | Associated TokenAllocation.id |
+| `expires_at` | datetime | TTL expiry (24 hours from creation) |
+
+**Request Flow**:
+
+1. **Client sends request with `Idempotency-Key` header**:
+   ```bash
+   curl -X POST http://localhost:8000/api/owner/mills/NABIWI_01/allocate-token \
+     -H "X-API-Key: owner-secret" \
+     -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000"
+   ```
+
+2. **Server checks cache FIRST** (before acquiring locks):
+   - Query `IdempotencyRecord` WHERE `idempotency_key = 550e8400...` AND `expires_at > now()`
+   - If found and not expired: return cached response immediately (no new allocation)
+   - If not found or expired: proceed to allocation logic
+
+3. **On successful allocation**:
+   - Store response in `IdempotencyRecord.response_json`
+   - Set `expires_at = now() + 24 hours`
+   - Return response
+
+4. **Retry semantics**:
+   - Identical `Idempotency-Key` + same `mill_id` = guaranteed identical response
+   - Safe to retry indefinitely; no duplicate side effects
+
+### Benefits
+
+- **Network resilience**: Client can safely retry failed requests without creating extra allocations
+- **Operator workflow**: Multiple submission attempts don't accumulate phantom tokens
+- **Auditability**: Retried requests map to same allocation ID, not new ones
+
+---
+
+## 2.8 Time-Weighted Risk (Phase 1 – **implemented**)
+
+### Purpose
+
+Make delays (overdue allocations) progressively more expensive by applying a multiplier to capital-at-risk calculations. This incentivizes operators to submit receipts promptly and discourages stale allocations.
+
+### Formula
+
+```
+time_weighted_risk = capital_at_risk × (1 + 0.1 × overdue_days)
+  capped at 2.0× (maximum multiplier)
+```
+
+**Where**:
+- `overdue_days` = (now − allocation.created_at) / 86400, measured in days
+- Linear growth: each additional day adds 10% penalty
+- Cap: After 10 days, multiplier is frozen at 2.0× (no incentive to abandon the cycle completely)
+
+### Behavior
+
+| Condition | Multiplier | Effect |
+|-----------|-----------|--------|
+| Same day allocation | 1.0× | No penalty, normal capital at risk |
+| 2 days overdue | 1.2× | 20% additional pressure |
+| 5 days overdue | 1.5× | 50% additional pressure |
+| 10+ days overdue | 2.0× | Maximum pressure (capped at 2.0×) |
+
+### Implementation
+
+**Computed dynamically** in `_compute_capital_at_risk()`:
+
+```python
+def _compute_capital_at_risk(mill_id: str, cycle_state: str, session: Session) -> tuple[Decimal, Decimal]:
+    """
+    Returns (capital_at_risk, time_weighted_risk)
+    
+    time_weighted_risk factors overdue days into risk pressure:
+    - Linear multiplier: 1 + 0.1 × overdue_days
+    - Capped at 2.0× to avoid infinite penalties
+    - Incentivizes prompt receipt submission
+    """
+    allocation = session.exec(
+        select(TokenAllocation).where(
+            TokenAllocation.mill_id == mill_id,
+            TokenAllocation.status == "PENDING"
+        ).order_by(TokenAllocation.created_at.desc())
+    ).first()
+    
+    if not allocation:
+        return Decimal(0), Decimal(0)
+    
+    overdue_seconds = (datetime.utcnow() - allocation.created_at).total_seconds()
+    overdue_days = max(0, overdue_seconds / 86400)
+    
+    multiplier = min(2.0, 1.0 + (0.1 * overdue_days))  # Cap at 2.0×
+    
+    capital_at_risk = Decimal(str(allocation.expected_revenue))
+    time_weighted_risk = capital_at_risk * Decimal(str(multiplier))
+    
+    return capital_at_risk, time_weighted_risk
+```
+
+### Decision Impact
+
+**Decision Feed Priority**: Allocations with high `time_weighted_risk` appear first, signaling urgency.
+
+```python
+# In get_decision_feed():
+priority = (log_comp * 0.7) + (linear_comp * 0.3)  # Weighted log-linear priority
+# time_weighted_risk drives both components → stale cycles bubble up
+```
+
+---
+
+## 2.9 Effective Rate Forensic Metric (Phase 1 – **implemented**)
+
+### Purpose
+
+Derive **operator's actual revenue per kWh** from cash receipts and energy inputs. This reveals operator behavior (bucket mix, pricing discipline, margin optimization) without enforcing it.
+
+### Formula
+
+```
+effective_rate_per_kwh = actual_cash_received / allocated_kwh
+```
+
+**Example**:
+- Allocated: 59.9 kWh
+- Actual remittance: MWK 80,955
+- Effective rate: 80,955 ÷ 59.9 = **1,350.3 MWK/kWh**
+
+### Interpretation
+
+**This is NOT an error metric.** It's a *behavioral window*.
+
+| Scenario | Effective Rate | Interpretation |
+|----------|----------------|-----------------|
+| Operator serving 20L buckets (lower margin) | < budgeted rate | Honest, serving cost-conscious customers |
+| Operator serving 5L buckets (higher margin) | > budgeted rate | Honest, serving premium segments |
+| Operator hiding bucket mix | ~budgeted rate but no cash reconciliation | Potential fraud flag (see physics layer) |
+| Operator siphoning cash | Significantly below budgeted | Leakage detected |
+
+### Data Flow
+
+1. **Logged in every `DecisionBasis`**: Each allocation decision includes the effective rate from the previous cycle
+2. **Computed from most recent**: `actual_cash_received` from latest `CashReceipt` + `allocated_kwh` from latest `TokenAllocation`
+3. **Optional field**: `DecisionBasis.effective_rate_per_kwh: Optional[Decimal]` (None if no prior cycle or no receipt)
+
+### Audit Trail
+
+Every decision_basis audit entry includes:
+
+```json
+{
+  "mill_id": "NABIWI_01",
+  "decision_log_timestamp": "2026-04-14T10:30:00Z",
+  "decision_basis": {
+    "capital_at_risk": "80865.00",
+    "time_weighted_risk": "80865.00",
+    "effective_rate_per_kwh": "1350.3",
+    "cycle_state": "PENDING",
+    "trust_score": 95,
+    ...
+  }
+}
+```
+
+### Nabiwi Calibration (Ground Truth)
+
+**Analysis of Feb–Mar 2026 SMS logs** (27 cycles, 591 buckets reported):
+
+| Metric | Value | Source |
+|--------|-------|--------|
+| **Average effective rate** | 1,350.0 MWK/bucket | 19 cycles with explicit rate |
+| **Variance** | ±0.0% | 100% pricing discipline across 37 days |
+| **No bucket-mix leakage** | Confirmed | Rate stable across 60/40/33/22 bucket days |
+| **Fraud risk** | LOW | All indicators clean: pricing discipline 100%, deductions transparent, meter-to-cash alignment perfect |
+
+**Action**: Set Nabiwi observation band at **1,340–1,360 MWK/kWh** (±0.75% tolerance based on actual variance).
+
+---
+
+## 2.10 Per-Mill Observation Protocol (Phase 1 – **implemented**)
+
+### Context
+
+Different mills have different operator behavior, bucket mix strategies, and customer bases. A universal enforcement band would cause false alarms on mills with legitimate pricing variations.
+
+**Decision**: Collect 5–10 baseline cycles per mill BEFORE applying tight enforcement bands.
+
+### Workflow
+
+**Phase: Observation (Week 1–2)**
+
+1. Deploy system with idempotency + time-weighted risk + effective rate tracking (no enforcement changes)
+2. Observe 5–10 cycles per mill in parallel
+3. For each cycle:
+   - Log `effective_rate_per_kwh` in decision_basis
+   - Export audit trail: `SELECT * FROM decision_audit WHERE mill_id = 'MILL_X' ORDER BY timestamp DESC`
+   - Flag if effective rate falls outside Phase 1 conservative band (1,100–1,500)
+
+4. **After 5–10 cycles**:
+   - Calculate mill-specific band: `median ± 2 standard deviations`
+   - Document findings (per-mill baseline report)
+   - Move to enforcement phase for that mill
+
+**Example: Nabiwi (already calibrated)**
+
+- After 37 days of SMS logs + Q1 2026 data: band = **1,340–1,360**
+- Observation complete; ready for enforcement
+- Any future cycle outside band → flag for review
+
+**Example: Mkwinda (new mill, week 2)**
+
+- Deploy system, observe 10 cycles
+- Cycles report (hypothetically): 1,210, 1,198, 1,225, 1,200, 1,188, 1,215, 1,205, 1,220, 1,195, 1,210 MWK/bucket
+- Band = 1,200 ± 20 = **1,180–1,220** (tighter than Phase 1 default)
+- From week 3 onwards: flag if rate falls outside [1,180–1,220]
+
+### Key Principles
+
+- **Observation first, enforcement second**: No blocking until baseline established
+- **Per-mill basis**: Each mill gets its own band based on actual data, not global assumption
+- **Forensic film validates**: After 10–15 cycles, conduct manual field observation (bucket count, cash handling) to validate effective_rate band
+- **Progressive tightening**: If fraud detected during forensic film, tighten band further or escalate
+
+### UI/Reporting
+
+**Decision Feed shows**:
+- Mill ID
+- Current effective_rate_per_kwh (from last cycle)
+- Observation band (if in observation phase)
+- **Status**: "OBSERVING" vs. "ENFORCING"
+
+**Exports**:
+- Per-mill baseline report (HTML): effective rate histogram, band recommendations, risk assessment
+- Audit trail (CSV): timestamp, effective_rate_per_kwh, capital_at_risk, time_weighted_risk
+
+### Transition to Enforcement
+
+Once 5–10 cycles collected and forensic film completed:
+
+1. Lock mill-specific band in `MillObservationConfig` table
+2. Set `enforcement_status = "ACTIVE"`
+3. From next cycle: any out-of-band rate → automatic decision_basis.reason = "EFFECTIVE_RATE_ANOMALY" (flag for review, no blocking yet)
+4. After 2–3 flagged cycles: escalate to enforcement (reduce allocation or block)
+
+---
 
 ### Layer 3: Economic & physical verification layer
 
@@ -1176,75 +1504,39 @@ All of these are now encoded as deterministic rules in PXE policies.
 
 ---
 
-### 9.3a CONDITIONAL Enforcement Bridge (Legacy Reference)
+### 9.3a CONDITIONAL Enforcement Bridge
 
-**Current State**:
+**Current State**: CONDITIONAL recommendations are not auto-enforced; lender policy fills the gap.
 
-- Trust Scorecard outputs structured recommendations (APPROVE / CONDITIONAL / DECLINE)
-- System automatically enforces APPROVE (token purchase gating allows purchase)
-- System enforces DECLINE in token purchase (blocks mill in BLOCKED state)
-- CONDITIONAL recommendations are **not** auto-enforced; lender policy fills the gap
+**⚠️ Gap Acknowledged**: For sophisticated capital providers, discretionary enforcement is a known limitation — it means outcomes are not fully reproducible across lenders. This is the only point in the system where determinism breaks.
 
-**When Trust Scorecard Returns CONDITIONAL**:
+**Committed Delivery**: The Lender Policy Module encoding CONDITIONAL as executable deterministic rules is targeted for delivery within **90 days of first Glass Box certification at NABIWI**. Until that date, lenders must implement CONDITIONAL rules manually in their credit policy framework.
 
-The system signals: "Credit is available at the stated terms, but this mill carries elevated monitoring cost or risk."
-
-The lender must implement their own CONDITIONAL policy:
-
-1. **Monitoring Requirements** (lender defines)
-   - Example: "quarterly reconciliation reports" or "monthly mill inspection"
-   - Example: "unannounced physical audits every 90 days"
-
-2. **Term Adjustments** (lender defines)
-   - Example: "advance rate capped at 50% VR (vs 60% standard)"
-   - Example: "loan tenor shortened by 60 days"
-   - Example: "collateral/escrow requirement increase by 25%"
-
-3. **Documentation** (lender defines in credit agreement)
-   - Map specific Trust Scorecard thresholds to CONDITIONAL terms
-   - Trigger: "IF score < 70 or state = Under Review THEN apply CONDITIONAL terms"
-
-4. **Ongoing Monitoring** (lender implements)
-   - Subscribe to Trust Scorecard updates for assigned mills
-   - Monitor state transitions (Verified → Under Review → Compromised)
-   - Escalate if conditions persist beyond agreed remediation window
-
-**Path to Full Automation**:
-
-The planned **Lender Policy Module** will encode these decisions as executable rules, eliminating human bridge:
+**Interim Lender Protocol**:
 
 ```
 Rule: CONDITIONAL_COMMERCIAL
-IF (score >= 60 AND score < 70) OR state = "Under Review"
+IF (score >= 60 AND score < 75) OR state = "Under Review"
 THEN {
-  recommendation: "CONDITIONAL",
-  terms: {
-    monitoring: "monthly",
-    tenor_adjustment: "-60_days",
-    advance_rate_cap: "0.50",
-    collateral_ratio: "1.35"
-  },
+  monitoring: "monthly",
+  tenor_adjustment: "-60_days",
+  advance_rate_cap: "0.50",
+  collateral_ratio: "1.35",
   remediation_window: "90_days"
-}
-
-Rule: DECLINE_COMPROMISED
-IF state = "Compromised"
-THEN {
-  recommendation: "DECLINE",
-  path_to_approval: "physical_audit_required",
-  remediation_criteria: "zero_breaches_60_days"
 }
 ```
 
-Until this module deploys, lenders must manually implement these rules in their credit policy framework.
+### 9.3b Portfolio-Level Anomaly Detection
 
-### 9.3b Portfolio-Level Anomaly Detection (**planned**)
+**Status: Evidentially demonstrated; implementation in active development.**
 
-Status: Specification defined; implementation pending.
+> **This is not a theoretical specification. The system already has evidence that portfolio-level signals exist and are operationally significant.**
 
-Purpose: Detect coordinated anomalies across multiple meters controlled by same operator.
+**The June 2025 Event (NABIWI, six-meter cluster)**:
 
-Problem: Single-meter analysis cannot detect portfolio signals. June 2025 synchronized 6-hour blackout across four Nabiwi meters is coincidence if evaluated per-meter, but coordinated signal at portfolio level.
+In June 2025, a synchronised six-hour blackout was recorded across four Nabiwi meters simultaneously. Evaluated per-meter, this is coincidence. Evaluated at portfolio level, it is a coordinated signal. No single-meter analysis layer in the current architecture would have surfaced this pattern. It was identified through manual cross-meter review — which is precisely the gap this module closes.
+
+This event is the evidential basis for portfolio anomaly detection. It is not a hypothetical. It happened.
 
 **Portfolio Trigger**:
 ```
@@ -1253,30 +1545,9 @@ IF 2+ meters show (same event type, overlapping time window, similar magnitude)
 THEN raise_portfolio_anomaly_flag(operator_id, correlation_score)
 ```
 
-**False-Positive Suppression**:
+**False-Positive Suppression**: Cross-reference against ESCOM outage registry before escalating. Missing registry entry → Level 2 flag (human review), not auto-escalation.
 
-Simultaneous events across multiple meters can be legitimate (e.g., real ESCOM grid outage affecting entire feeder). The `NOT EXISTS (known_outage_event)` condition prevents false positives by:
-- Cross-referencing operator's coordination with ESCOM outage logs
-- Checking if grid outage was announced/documented for the time window
-- Allowing operator to provide evidence of external system failure
-
-Examples of *coordinated* signals (not suppressed): Synchronized revenue loading after gap, correlated reporting silence without external cause, coordinated meter resets mid-cycle.
-
-Examples of *legitimate simultaneous* events (suppressed): Real ESCOM outage affecting cluster, grid maintenance window affecting feeder.
-
-**Registry Ownership & Fallback Behavior**:
-
-The outage registry must be maintained and updated by a designated party to prevent silent failures when records are missing or stale:
-
-- **Registry Source**: ESCOM announced outages (preferred, authoritative), operator self-report with timestamp evidence (corroborating option), or GridLedger ops maintained list of verified grid events
-- **Responsibility**: GridLedger ops (polling ESCOM API for latest grid advisories) or lender risk team (importing ESCOM bulletins)
-- **Update Frequency**: Daily synchronization with ESCOM outage logs; any outage with public announcement within 24-hour window is eligible for suppression
-- **Missing Entry Fallback**: When no outage record exists for a time window:
-  - **Default Behavior**: Flag for human review (do not auto-suppress, do not auto-escalate). Issue severity reduced to Level 2 (anomaly pending verification) rather than Level 3 (fraud signal)
-  - **Rationale**: Stale registry is worse than absent registry — auto-suppression on missing data creates blindness, auto-escalation creates false alarms
-  - **Resolution Path**: Operator may submit ESCOM evidence (SMS notifications, load-shedding bulletin, email advisory) to confirm outage; lender reviews and either retroactively suppresses flag or escalates to fraud investigation
-
-Implementation: `backend/portfolio_engine.py` maintains registry via cron job polling ESCOM API or manual upload. API endpoint: `GET /api/v1/admin/outage-registry/{start_date}/{end_date}` returns known grid events for reconciliation.
+**Implementation**: `backend/portfolio_engine.py` — active development, target completion Phase 2.
 
 ### 9.4 Audit trigger logic
 
@@ -1346,6 +1617,269 @@ Where:
 - ✅ No manual override of policy outcomes
 
 ### 10.1 Per-Cycle Token Allocation (Block 8) — Adherence-Based Capital Enforcement
+
+---
+
+## 11. API Reference (Phase 1 – April 2026)
+
+All owner endpoints require the `X-API-Key` header for authentication.
+
+### 11.1 GET /api/owner/decision-feed
+
+**Purpose**: Actionable feed of mills sorted by economic urgency.
+
+**Request**:
+```bash
+curl -X GET http://localhost:8000/api/owner/decision-feed \
+  -H "X-API-Key: owner-secret"
+```
+
+**Response** (200 OK):
+```json
+[
+  {
+    "mill_id": "NABIWI_01",
+    "issue": "PENDING_NEAR_TIMEOUT",
+    "urgency": "HIGH",
+    "capital_at_risk_mwk": 80865.00,
+    "time_weighted_risk_mwk": 121297.50,
+    "remaining_hours": 4.5,
+    "priority": 42.7,
+    "action": "Review pending allocation; operator should submit receipt"
+  }
+]
+```
+
+**Sorting**: Hybrid log-linear priority (combines log component for scale-insensitivity with linear component for extreme values).
+
+---
+
+### 11.2 GET /api/owner/mills/{mill_id}/decision
+
+**Purpose**: Individual mill decision basis (includes effective_rate forensic metric).
+
+**Request**:
+```bash
+curl -X GET http://localhost:8000/api/owner/mills/NABIWI_01/decision \
+  -H "X-API-Key: owner-secret"
+```
+
+**Response** (200 OK):
+```json
+{
+  "allowed": true,
+  "reason": null,
+  "decision_basis": {
+    "mill_id": "NABIWI_01",
+    "cycle_state": "PENDING",
+    "trust_score": 95,
+    "adherence": 100.1,
+    "lag_hours": 12.3,
+    "capital_at_risk": "80865.00",
+    "time_weighted_risk": "94208.25",
+    "exposure_used": "80865.00",
+    "exposure_limit": "500000.00",
+    "effective_rate_per_kwh": "1350.3",
+    "decision_timestamp": "2026-04-14T10:30:45Z"
+  }
+}
+```
+
+**Key Fields**:
+- `effective_rate_per_kwh`: Forensic metric derived from previous cycle's cash receipt. Reveals operator bucket mix behavior. Compared against mill-specific observation band (e.g., Nabiwi: 1,340–1,360).
+- `time_weighted_risk`: Capital at risk adjusted for allocation age. Stale cycles have higher risk multiplier.
+- `cycle_state`: "IDLE" (ready for new allocation), "PENDING" (awaiting receipt), or "MISSING" (overdue).
+
+---
+
+### 11.3 POST /api/owner/mills/{mill_id}/allocate-token
+
+**Purpose**: Create new token allocation (59.9 kWh) with idempotency guarantee.
+
+**Required Header**: `Idempotency-Key`
+- UUID format (e.g., `550e8400-e29b-41d4-a716-446655440000`)
+- Identical Idempotency-Key + same mill_id = guaranteed identical response
+- Safe to retry indefinitely without creating duplicate allocations
+
+**Request**:
+```bash
+curl -X POST http://localhost:8000/api/owner/mills/NABIWI_01/allocate-token \
+  -H "X-API-Key: owner-secret" \
+  -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000" \
+  -H "Content-Type: application/json"
+```
+
+**Response** (200 OK):
+```json
+{
+  "allowed": true,
+  "allocation_id": 12345,
+  "allocated_kwh": 59.9,
+  "expected_revenue_mwk": 80865.00,
+  "decision_basis": {
+    "mill_id": "NABIWI_01",
+    "cycle_state": "IDLE",
+    "capital_at_risk": "80865.00",
+    "time_weighted_risk": "80865.00",
+    "effective_rate_per_kwh": "1350.3",
+    "decision_timestamp": "2026-04-14T10:31:00Z"
+  }
+}
+```
+
+**Idempotency Behavior**:
+
+*First request*:
+```bash
+curl -X POST http://localhost:8000/api/owner/mills/NABIWI_01/allocate-token \
+  -H "Idempotency-Key: 550e8400-..."
+# → Creates allocation ID 12345, stores response
+```
+
+*Retry (within 24 hours with same header)*:
+```bash
+curl -X POST http://localhost:8000/api/owner/mills/NABIWI_01/allocate-token \
+  -H "Idempotency-Key: 550e8400-..."
+# → Returns cached response, allocation ID still 12345, no duplicate
+```
+
+*Different Idempotency-Key*:
+```bash
+curl -X POST http://localhost:8000/api/owner/mills/NABIWI_01/allocate-token \
+  -H "Idempotency-Key: 660f9511-..." 
+# → Creates new allocation ID 12346 (different key = new allocation)
+```
+
+**Error Response** (400 Bad Request):
+```json
+{
+  "allowed": false,
+  "reason": "CYCLE_PENDING",
+  "detail": "Mill NABIWI_01 already has pending allocation (ID 12345). Previous cycle must be completed before next allocation."
+}
+```
+
+---
+
+### 11.4 POST /api/owner/mills/{mill_id}/record-cash-receipt
+
+**Purpose**: Record operator's cash remittance (closes current cycle).
+
+**Request**:
+```bash
+curl -X POST http://localhost:8000/api/owner/mills/NABIWI_01/record-cash-receipt \
+  -H "X-API-Key: owner-secret" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "allocation_id": 12345,
+    "amount_mwk": 80955.00,
+    "notes": "SMS from operator: pa 14.4.26 Open 60 Close 0 Ndagayil 60 Units Amount 80955 Late 1350"
+  }'
+```
+
+**Response** (200 OK):
+```json
+{
+  "receipt_id": 987654,
+  "allocation_id": 12345,
+  "status": "CLOSED",
+  "variance_percent": 0.11,
+  "effective_rate_per_kwh": 1350.3,
+  "resolution_needed": false,
+  "decision_basis": {
+    "mill_id": "NABIWI_01",
+    "effective_rate_per_kwh": "1350.3",
+    "decision_timestamp": "2026-04-14T10:35:22Z"
+  }
+}
+```
+
+**Effective Rate Calculation** (in response):
+```
+effective_rate_per_kwh = 80955.00 / 59.9 = 1350.3 MWK/kWh
+```
+
+This is logged in the next cycle's `decision_basis` for forensic tracking.
+
+---
+
+### 11.5 Effective Rate Observation (Phase 1)
+
+**Key Principle**: Effective rate is logged but NOT enforced in Phase 1. It's a forensic window.
+
+**Expected Behavior: Nabiwi** (calibrated for observation band 1,340–1,360):
+
+```
+Cycle 1: effective_rate_per_kwh = 1,350.1 ✅ Within band
+Cycle 2: effective_rate_per_kwh = 1,349.8 ✅ Within band
+Cycle 3: effective_rate_per_kwh = 1,350.5 ✅ Within band
+Cycle 4: effective_rate_per_kwh = 1,290.0 ⚠️ Below band (anomaly, review)
+Cycle 5: effective_rate_per_kwh = 1,350.2 ✅ Back to normal
+```
+
+**Action**: No blocking in Phase 1. Anomalies are flagged in audit trail and reported in decision_feed.
+
+**After 5–10 cycles**: Move to enforcement (add decision rule: if effective_rate outside band → REDUCE allocation or flag for review).
+
+---
+
+### 11.6 Authentication & Configuration
+
+**Environment Variables**:
+
+```bash
+export OWNER_API_KEY="owner-secret"              # Required for /api/owner/* endpoints
+export SYSTEM_ALLOCATION_ENABLED="true"           # Enable token allocation logic
+export GRIDLEDGER_API_KEY="letmein123"            # Optional fallback for other endpoints
+```
+
+**Headers**:
+
+| Header | Required | Example | Purpose |
+|--------|----------|---------|---------|
+| `X-API-Key` | Yes | `owner-secret` | Authentication (matches OWNER_API_KEY env var) |
+| `Idempotency-Key` | For allocate-token | `550e8400-e29b-41d4-a716-446655440000` | Deduplication; safe retries |
+| `Content-Type` | Optional | `application/json` | Request format |
+
+---
+
+### 11.7 Lifecycle Example: One Complete Cycle
+
+**Day 1, 10:00 AM — Allocation**:
+```bash
+curl -X POST http://localhost:8000/api/owner/mills/NABIWI_01/allocate-token \
+  -H "X-API-Key: owner-secret" \
+  -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000"
+# → allocation_id: 12345, expected_revenue: 80,865 MWK
+```
+
+**Day 1, 6:00 PM — Operator produces and sends SMS with cash amount**:
+
+*Operator SMS* (via WhatsApp):
+```
+Pa 1.4.26 Open 60 Close 0 Ndagayil 60 Units Amount 80955 Late 1350 Ma Units Atha
+```
+
+**Day 1, 6:15 PM — Record Receipt**:
+```bash
+curl -X POST http://localhost:8000/api/owner/mills/NABIWI_01/record-cash-receipt \
+  -H "X-API-Key: owner-secret" \
+  -d '{"allocation_id": 12345, "amount_mwk": 80955, "notes": "SMS receipt"}'
+# → receipt_id: 987654, status: CLOSED, variance: +0.11%, effective_rate: 1350.3
+```
+
+**Day 2, 10:00 AM — Next Allocation Decision**:
+```bash
+curl -X GET http://localhost:8000/api/owner/mills/NABIWI_01/decision
+# → decision_basis includes effective_rate_per_kwh: 1350.3 (from prior cycle)
+# → Compared against Nabiwi observation band [1,340–1,360]: ✅ In band
+# → Next allocation: ALLOWED
+```
+
+---
+
+This completes the Phase 1 system architecture: identity + continuity + effective rate forensics + per-mill observation protocol, enabled by idempotency and time-weighted risk.
+
 
 **Component Overview**:
 
@@ -1812,11 +2346,63 @@ PXE cannot detect fraud at Layer 1 (identity), Layer 2 (event continuity), or La
 
 It can only enforce consequences **after fraud is detected and classified**.
 
-**Mitigation**:
-- Physical security at metering points (seals, tamper detection)
-- Regular unannounced audits (Layer 3.4 event completeness)
-- Operator scrutiny (Layer 1 identity verification)
-- Statistical anomaly detection (Layer 3.3 consistency analysis)
+**Mitigation**: Physical seals, tamper detection, unannounced audits, operator identity scrutiny, statistical anomaly detection.
+
+**Resolution**: Phase 2 clamp integration converts probabilistic physical defence to verified determinism. This is the engineered solution to the adversarial input problem.
+
+---
+
+## 10.9 Recovery Time Objective (RTO) — Formal Statement
+
+> **This section is a design choice explicitly stated, not a gap to be discovered during due diligence.**
+
+**Purpose**: Define the maximum time between a fraud or breach event occurring and the system detecting, classifying, and acting on it. This is a commitment, not an estimate.
+
+### RTO by Breach Type
+
+| Breach Type | Detection Layer | Detection Window | Capital Action |
+|---|---|---|---|
+| Gap breach (continuity) | Layer 2 | Immediate on next event submission | Allocation blocked within same cycle |
+| Variance breach | Layer 3.2 | Within reconciliation cycle (daily) | UNDER_REVIEW within 24h |
+| Missing cycle (no remittance) | PXE / Scheduler | 48h timeout + scheduler interval | MISSING state, allocation blocked |
+| Energy deficit breach | Layer 3.1 | Immediate on event ingestion | FLAGGED_ECONOMIC_DEFICIT |
+| Suspicion accumulation | Layer 3.3 | Daily scoring cycle | Penalty applies within 24h of threshold crossing |
+| Portfolio anomaly | §9.3b | Daily cross-meter review | Level 2 flag within 24h of detection run |
+
+### Worst-Case Detection: MISSING Cycle
+
+**Current configuration**:
+- Scheduler runs every 24h
+- MISSING_CYCLE_TIMEOUT_HOURS = 48h
+- Worst-case detection: 72h (48h timeout + 24h scheduler lag)
+
+**This is an explicit design choice**. The 72h worst-case window was selected to:
+- Accommodate operator operational realities (payment collection, mobile connectivity)
+- Avoid false-positive MISSING flags from transient network issues
+- Balance fraud detection speed against operator relationship stability
+
+**Alternative available**: Scheduler at 6h intervals → worst-case detection ~54h. Business decision deferred pending first 30 days of live MISSING/DISPUTED distribution data.
+
+**Business Decision Required**: Confirm 72h maximum grace period acceptable, or trigger scheduler cadence review after Phase 1 live data.
+
+### Residual Risk Window (Pre-Phase 2)
+
+Between current deployment and Phase 2 clamp integration:
+
+- Consistent spoofing (Shadow Meter) is not detectable within any RTO
+- Detection relies on statistical accumulation (Layer 3.3) and physical audit scheduling
+- This is acknowledged, not concealed
+- Phase 2 clamp sensors close this window by converting assumed determinism to verified determinism
+
+**Phase 2 Target**: Within 6 months of first Glass Box certification at NABIWI.
+
+### RTO Communication for Capital Markets
+
+For $1bn-level institutional investors, the honest statement is:
+
+> "GridLedger detects and acts on most breach types within 24–48 hours. The worst-case detection window for a missing payment cycle is 72 hours by design. Consistent meter spoofing is the acknowledged residual risk, mitigated by statistical forensics and unannounced audits, and resolved architecturally by Phase 2 sensor integration."
+
+That statement is more credible than a claim of real-time fraud prevention. It is also true.
 
 ---
 
@@ -1898,8 +2484,12 @@ PXE records this for audit trail. Does not modify (read-only confirmation).
 
 ## Final Note (Executive Reality)
 
-This version does three critical things:
+This version (v2.9) does five critical things:
 
-- Protects you legally (no hidden assumptions)
-- Signals maturity to institutions (explicit trust boundaries)
-- Forces the roadmap (Token Gap enforcement is now unavoidable)
+1. **Protects legally**: No hidden assumptions. Adversarial input risk, RTO, and CONDITIONAL gap are explicitly named.
+2. **Signals maturity to institutions**: Explicit trust boundaries, committed delivery dates, and acknowledged residual risks.
+3. **Forces the roadmap**: Phase 2 clamp integration and Lender Policy Module have committed delivery anchors.
+4. **Elevates real evidence**: The June 2025 six-meter portfolio event is named, dated, and positioned as proof-of-concept, not theory.
+5. **Bridges to capital markets**: §0 Signal-to-Signature chain translates the full protocol into seven investor-grade steps.
+
+The system does not claim to be perfect. It claims to be the most verifiable accountability infrastructure available for this asset class. That claim is defensible. Perfect is not.

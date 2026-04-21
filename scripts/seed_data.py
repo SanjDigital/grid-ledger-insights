@@ -104,19 +104,32 @@ def seed_tariff_rates():
     """
     Seed historical tariff rates.
     
-    Critical: NABIWI node and all mills updated to K160.13 effective 2026-01-01
-    This reflects the MERA January 2026 tariff adjustment (+12% from previous K142.98).
+    Critical: MERA tariff schedule for ET7 (three-phase, general, prepaid):
+    - K253.70 until 2026-01-19 (legacy rate)
+    - K284.15 effective 2026-01-19 (MERA Jan 2026 adjustment +12%)
     """
     mill_ids = ["37154345799", "37154367942", "37154463253", "37134859091", "37134002601", "NABIWI_NRID"]
     
     rates = []
+    
+    # Historical rate (pre-Jan 19, 2026)
     for mill_id in mill_ids:
         rates.append(TariffRate(
             mill_id=mill_id,
-            rate_mk_per_kwh=160.13,
+            rate_mk_per_kwh=253.70,
             effective_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
             set_by="GRIDLEDGER_SYSTEM",
-            notes="MERA Jan 2026 tariff adjustment +12% (from previous K142.98)"
+            notes="MERA ET7 rate before Jan 2026 adjustment"
+        ))
+    
+    # New rate effective Jan 19, 2026 (MERA announcement)
+    for mill_id in mill_ids:
+        rates.append(TariffRate(
+            mill_id=mill_id,
+            rate_mk_per_kwh=284.15,
+            effective_date=datetime(2026, 1, 19, tzinfo=timezone.utc),
+            set_by="GRIDLEDGER_SYSTEM",
+            notes="MERA Jan 2026 ET7 tariff adjustment (three-phase prepaid): +12.0% to 284.15 Mk/kWh"
         ))
     
     with Session(engine) as session:
@@ -131,7 +144,7 @@ def seed_tariff_rates():
                 print(f"Tariff rate already exists for {rate.mill_id} effective {rate.effective_date}")
             else:
                 session.add(rate)
-                print(f"Added tariff rate for {rate.mill_id}: K{rate.rate_mk_per_kwh} effective {rate.effective_date.date()}")
+                print(f"Added tariff rate for {rate.mill_id}: {rate.rate_mk_per_kwh} Mk/kWh effective {rate.effective_date.date()}")
         session.commit()
     print("✅ Tariff rates seeded.")
 

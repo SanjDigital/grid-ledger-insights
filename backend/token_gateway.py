@@ -8,11 +8,20 @@ Implements the per-cycle token allocation control system.
 
 import logging
 from datetime import datetime, timezone, timedelta
+from decimal import Decimal
 from sqlmodel import Session, select
 from scripts.init_db import TokenAllocation, CashReceipt, Mill
 from backend.config import TOLERANCE_PERCENT, DISPUTED_ADHERENCE_PENALTY, MISSING_CYCLE_TIMEOUT_HOURS
 
 logger = logging.getLogger(__name__)
+
+
+class AllocationError(Exception):
+    """Raised when token allocation fails due to policy violation."""
+    def __init__(self, code: str, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(message)
 
 
 class TokenGateway:
@@ -21,12 +30,14 @@ class TokenGateway:
     def __init__(self, session: Session):
         self.session = session
     
-    def allocate_token(self, mill_id: str) -> dict:
+    def allocate_token(self, mill_id: str, allocated_kwh: Decimal, expected_revenue: Decimal) -> dict:
         """
-        Allocate 59.9 kWh token to a mill.
+        Allocate token to a mill.
         
-        Expected revenue is computed using mill.revenue_rate_per_kwh (what operator charges customers),
-        NOT ESCOM's energy cost tariff.
+        Args:
+        - mill_id: Mill identifier
+        - allocated_kwh: Amount of energy to allocate (e.g., 59.9 kWh)
+        - expected_revenue: Expected revenue in MWK based on effective rate
         
         Guards:
         - Reject if a PENDING allocation already exists for this mill
@@ -35,14 +46,13 @@ class TokenGateway:
         Returns:
         {
             'allocation_id': int,
-            'allocated_kwh': 59.9,
-            'expected_revenue': float,
-            'revenue_rate_per_kwh': float,
+            'allocated_kwh': Decimal,
+            'expected_revenue': Decimal,
             'status': 'PENDING'
         }
         
         Raises:
-        - ValueError: If PENDING allocation already exists, or if mill not found
+        - AllocationError: If PENDING allocation already exists, or if mill not found
         """
         # Check for existing pending allocation
         pending = self.session.exec(
@@ -53,29 +63,28 @@ class TokenGateway:
         ).first()
         
         if pending:
-            raise ValueError(
-                f"Mill {mill_id} already has a pending allocation (ID {pending.id}). "
-                f"Previous cycle must be completed before next allocation."
+            raise AllocationError(
+                code="CYCLE_PENDING",
+                message=f"Mill {mill_id} already has a pending allocation (ID {pending.id}). "
+                        f"Previous cycle must be completed before next allocation."
             )
         
-        # Get mill to retrieve revenue rate (what operator charges customers)
+        # Get mill to verify it exists
         mill = self.session.exec(
             select(Mill).where(Mill.id == mill_id)
         ).first()
         
         if not mill:
-            raise ValueError(f"Mill {mill_id} not found")
+            raise AllocationError(
+                code="MILL_NOT_FOUND",
+                message=f"Mill {mill_id} not found"
+            )
         
-        if not mill.revenue_rate_per_kwh:
-            raise ValueError(f"Mill {mill_id} has no revenue_rate_per_kwh configured")
-        
-        allocated_kwh = 59.9
-        expected_revenue = allocated_kwh * mill.revenue_rate_per_kwh
-        
+        # Record allocation
         allocation = TokenAllocation(
             mill_id=mill_id,
-            allocated_kwh=allocated_kwh,
-            expected_revenue=expected_revenue,
+            allocated_kwh=float(allocated_kwh),
+            expected_revenue=float(expected_revenue),
             status="PENDING"
         )
         
@@ -85,13 +94,12 @@ class TokenGateway:
         
         logger.info(
             f"Allocated token {allocation.id} to mill {mill_id}, "
-            f"allocated_kwh={allocated_kwh}, revenue_rate={mill.revenue_rate_per_kwh}, expected_revenue={expected_revenue:.2f}"
+            f"allocated_kwh={allocated_kwh}, expected_revenue={expected_revenue}"
         )
         
         return {
             "allocation_id": allocation.id,
             "allocated_kwh": allocated_kwh,
-            "revenue_rate_per_kwh": mill.revenue_rate_per_kwh,
             "expected_revenue": expected_revenue,
             "status": allocation.status
         }
@@ -179,14 +187,12 @@ class TokenGateway:
 
 
 # Module-level convenience functions
-def allocate_token(session: Session, mill_id: str) -> dict:
+def allocate_token(session: Session, mill_id: str, allocated_kwh: Decimal, expected_revenue: Decimal) -> dict:
     """
     Convenience wrapper for TokenGateway.allocate_token().
-    
-    Revenue rate is automatically fetched from the Mill's revenue_rate_per_kwh field.
     """
     gateway = TokenGateway(session)
-    return gateway.allocate_token(mill_id)
+    return gateway.allocate_token(mill_id, allocated_kwh, expected_revenue)
 
 
 def record_cash_receipt(session: Session, allocation_id: int, amount: float) -> dict:

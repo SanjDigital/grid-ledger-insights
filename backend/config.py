@@ -32,6 +32,16 @@ LATENCY_BOUNDARIES = [
 ]
 
 # ============================================================================
+# GLASS BOX CERTIFICATION CONFIG
+# ============================================================================
+
+GLASS_BOX_MIN_CYCLES       = 10      # Minimum consecutive clean cycles
+GLASS_BOX_MIN_ADHERENCE    = 0.90    # Minimum cash/expected ratio
+GLASS_BOX_MAX_DISPUTED     = 0       # Maximum open DISPUTED cycles
+GLASS_BOX_MAX_MISSING      = 0       # Maximum MISSING cycles in window
+GLASS_BOX_MAX_LAG_HOURS    = 48.0    # Maximum average remittance latency
+
+# ============================================================================
 # OPERATIONAL INTENT (Design Rationale)
 # ============================================================================
 

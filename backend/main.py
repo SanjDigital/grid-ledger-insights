@@ -7,6 +7,8 @@ from backend.api_reports import (
     get_mill_credit_history,
     get_capital_tier_recommendation,
 )
+from backend.revenue_engine import get_certification_status
+from backend.owner_routes import router as owner_router
 from typing import Optional
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -14,6 +16,9 @@ from apscheduler.triggers.interval import IntervalTrigger
 import logging
 
 app = FastAPI()
+
+# Include owner routes (allocation endpoints)
+app.include_router(owner_router)
 
 API_KEY = os.getenv('GRIDLEDGER_API_KEY', 'letmein123')
 
@@ -87,6 +92,25 @@ def mill_ear_accountability(mill_id: str, authorized: bool = Depends(validate_ap
     """Get Energy Accountability Ratio (EAR) status and tier classification."""
     from backend.api_reports import get_ear_accountability_status
     return get_ear_accountability_status(mill_id)
+
+
+@app.get("/api/v1/mills/{mill_id}/certification")
+def get_mill_certification(mill_id: str, authorized: bool = Depends(validate_api_key)):
+    """
+    Returns Glass Box Certification status for a mill.
+    Certification is computed live from enforcement data — not cached.
+    Automatically updates mill.glass_box_certified on each call.
+    """
+    from sqlmodel import Session
+    from scripts.init_db import engine
+    
+    try:
+        with Session(engine) as session:
+            result = get_certification_status(mill_id, session)
+        return result
+    except Exception as e:
+        logger.error(f"Certification check failed for {mill_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
