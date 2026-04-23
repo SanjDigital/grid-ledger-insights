@@ -12,7 +12,7 @@ from backend.reconciliation_engine import ReconciliationEngine, ReconError
 from backend.enforcement_engine import EnforcementEngine
 from backend.temporal_guard import TemporalGuard, TemporalWarning, TemporalBreach
 from backend.revenue_engine import get_last_cycle_adherence, get_last_cycle_lag
-from backend.policy_execution_engine import compute_per_cycle_advance_rate
+from backend.policy_execution_engine import compute_per_cycle_advance_rate, classify_turnover_time
 from backend.trust_scorecard import TrustScorecardGenerator
 from backend.config import BASE_ADVANCE_RATE
 
@@ -38,16 +38,17 @@ def evaluate_mill_capital(mill_id: str, trust_score: float, session: Session) ->
     This is the core integration point for per-cycle token allocation:
     - Fetches last cycle's adherence (cash_remitted / expected_revenue)
     - Fetches last cycle's latency (hours from allocation to receipt)
-    - Applies both penalties to base_rate for next cycle
+    - Classifies turnover time (FAST/NORMAL/SLOW/STALLED)
+    - Applies all penalties and bonuses to base_rate for next cycle
     
     Formula:
-        advance_rate = base_rate × (trust_score/100) × (adherence²) × latency_penalty(lag_hours)
+        advance_rate = base_rate × (trust_score/100) × (adherence²) × latency_penalty(lag_hours) × turnover_penalty(classification)
     
     Scenarios:
-    - Perfect previous cycle (adherence 1.0, <24h lag) → normal rate
-    - Good cycle (adherence 0.95, 30h lag) → ~30% reduction
+    - Perfect previous cycle (adherence 1.0, <24h lag, FAST) → boosted rate
+    - Good cycle (adherence 0.95, 30h lag, NORMAL) → ~30% reduction
     - Disputed cycle (adherence 0.0) → severe reduction
-    - MISSING cycle (adherence 0.0) → severe reduction
+    - STALLED cycle (lag ≥ 72h, STALLED) → advance_rate = 0.0 (BLOCKED next token)
     
     Args:
         mill_id: Mill identifier
@@ -67,9 +68,12 @@ def evaluate_mill_capital(mill_id: str, trust_score: float, session: Session) ->
         adherence = get_last_cycle_adherence(mill_id, session)
         lag_hours = get_last_cycle_lag(mill_id, session)
         
+        # Classify turnover time based on lag
+        turnover_classification = classify_turnover_time(lag_hours)
+        
         logger.debug(
             f"evaluate_mill_capital({mill_id}): "
-            f"trust={trust_score}, adherence={adherence}, lag={lag_hours}h"
+            f"trust={trust_score}, adherence={adherence}, lag={lag_hours}h, turnover={turnover_classification}"
         )
         
         # Compute advance rate for this mill's next cycle
@@ -77,12 +81,13 @@ def evaluate_mill_capital(mill_id: str, trust_score: float, session: Session) ->
             trust_score=trust_score,
             adherence=adherence,
             lag_hours=lag_hours,
-            base_rate=BASE_ADVANCE_RATE
+            base_rate=BASE_ADVANCE_RATE,
+            turnover_classification=turnover_classification
         )
         
         logger.info(
             f"Computed next advance rate for {mill_id}: "
-            f"{rate:.4f} (trust={trust_score}, adherence={adherence:.2f}, lag={lag_hours}h)"
+            f"{rate:.4f} (trust={trust_score}, adherence={adherence:.2f}, lag={lag_hours}h, turnover={turnover_classification})"
         )
         
         return rate

@@ -33,7 +33,7 @@ from scripts.init_db import (
     engine,
 )
 from backend.config import MISSING_CYCLE_TIMEOUT_HOURS
-from backend.policy_execution_engine import compute_per_cycle_advance_rate
+from backend.policy_execution_engine import compute_per_cycle_advance_rate, classify_turnover_time
 from backend.revenue_engine import (
     get_certification_status,
     get_last_cycle_adherence,
@@ -424,10 +424,12 @@ def _compute_allocation_size(
     Used by both the read‑only decision endpoint and the actual allocation.
     Returns Decimal kWh.
     """
+    turnover_classification = classify_turnover_time(lag_hours)
     advance_rate = compute_per_cycle_advance_rate(
         trust_score=trust_score,
         adherence=adherence,
         lag_hours=lag_hours,
+        turnover_classification=turnover_classification,
     )
     return BASE_CYCLE_KWH * Decimal(advance_rate)
 
@@ -491,10 +493,12 @@ def _build_decision_basis(
     simulated_kwh = _compute_allocation_size(mill, trust_score, adherence, lag_hours) if simulated_allowed else Decimal(0)
     simulated_revenue = simulated_kwh * Decimal(str(mill.revenue_rate_per_kwh)) if mill and mill.revenue_rate_per_kwh else Decimal(0)
 
+    turnover_classification = classify_turnover_time(lag_hours)
     next_advance_rate = compute_per_cycle_advance_rate(
         trust_score=trust_score,
         adherence=adherence,
         lag_hours=lag_hours,
+        turnover_classification=turnover_classification,
     )
     assert 0.0 <= next_advance_rate <= 1.0
 
@@ -631,10 +635,12 @@ def get_mill_status(
 
     adherence = get_last_cycle_adherence(mill_id, session)
     lag_hours = get_last_cycle_lag(mill_id, session)
+    turnover_classification = classify_turnover_time(lag_hours)
     next_advance_rate = compute_per_cycle_advance_rate(
         trust_score=trust_score,
         adherence=adherence,
         lag_hours=lag_hours,
+        turnover_classification=turnover_classification,
     )
     return MillStatusResponse(
         mill_id=mill_id,

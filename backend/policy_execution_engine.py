@@ -386,11 +386,68 @@ def latency_penalty(lag_hours: float) -> float:
     return 0.85
 
 
+def classify_turnover_time(lag_hours: float) -> str:
+    """
+    Classify cycle turnover time based on latency hours.
+    
+    Classification:
+    - lag < 24h   → 'FAST'   (rapid capital velocity)
+    - 24 ≤ lag < 48h  → 'NORMAL' (standard commercial terms)
+    - 48 ≤ lag < 72h  → 'SLOW'   (concerning, pattern watch)
+    - lag ≥ 72h   → 'STALLED' (blocked, capital held)
+    
+    Args:
+        lag_hours: Time in hours from cycle allocation to cash receipt
+    
+    Returns:
+        str: Classification ('FAST', 'NORMAL', 'SLOW', or 'STALLED')
+    """
+    if lag_hours < 24:
+        return "FAST"
+    elif lag_hours < 48:
+        return "NORMAL"
+    elif lag_hours < 72:
+        return "SLOW"
+    else:
+        return "STALLED"
+
+
+def turnover_penalty(turnover_classification: str) -> float:
+    """
+    Returns penalty multiplier based on turnover time classification.
+    
+    Classification multipliers:
+    - 'FAST'    → 1.05 (5% bonus for rapid capital velocity)
+    - 'NORMAL'  → 1.00 (no penalty, standard terms)
+    - 'SLOW'    → 0.95 (5% penalty, pattern watch required)
+    - 'STALLED' → 0.00 (complete block, no token next cycle)
+    
+    The STALLED classification creates a hard circuit breaker:
+    when lag ≥ 72h (3 days), next cycle allocation is blocked entirely.
+    This prevents capital accumulation from stalled operators.
+    
+    Args:
+        turnover_classification: One of 'FAST', 'NORMAL', 'SLOW', 'STALLED'
+    
+    Returns:
+        float: Penalty/bonus multiplier
+    """
+    multipliers = {
+        "FAST": 1.05,      # Bonus: rapid deployment
+        "NORMAL": 1.00,    # No penalty
+        "SLOW": 0.95,      # Minor penalty
+        "STALLED": 0.00,   # Complete block
+    }
+    
+    return multipliers.get(turnover_classification, 1.00)  # Default: no penalty
+
+
 def compute_per_cycle_advance_rate(
     trust_score: float,
     adherence: float,
     lag_hours: float,
-    base_rate: float = 0.5
+    base_rate: float = 0.5,
+    turnover_classification: str = "NORMAL"
 ) -> float:
     """
     Compute advance rate for NEXT cycle based on previous cycle performance.
@@ -400,32 +457,35 @@ def compute_per_cycle_advance_rate(
                        × (trust_score / 100) 
                        × (adherence²) 
                        × latency_penalty(lag_hours)
+                       × turnover_penalty(turnover_classification)
     
     Where:
     - trust_score: Operator integrity score (0-100)
     - adherence: Cash remitted / expected revenue (0.0-∞, typically 0.8-1.2)
     - lag_hours: Hours from cycle allocation to cash receipt
     - base_rate: Starting point before penalties (default 0.5 = 50%)
+    - turnover_classification: Cycle velocity classification (FAST/NORMAL/SLOW/STALLED)
     
     Example scenarios:
-    - Perfect adherence (1.0), on-time (<24h), high trust (95)
-      → 0.5 × 0.95 × 1.0 × 1.0 = 0.4750 (unchanged)
+    - Perfect adherence (1.0), on-time (<24h, FAST), high trust (95)
+      → 0.5 × 0.95 × 1.0 × 1.0 × 1.05 = 0.499 (slight bonus)
     
-    - Good adherence (0.95), medium latency (36h), medium trust (80)
-      → 0.5 × 0.80 × 0.9025 × 0.95 = 0.3438 (-31% from base)
+    - Good adherence (0.95), medium latency (36h, NORMAL), medium trust (80)
+      → 0.5 × 0.80 × 0.9025 × 0.95 × 1.0 = 0.3438 (-31% from base)
     
-    - Fair adherence (0.90), slow latency (60h), low trust (60)
-      → 0.5 × 0.60 × 0.81 × 0.90 = 0.2187 (-56% from base)
+    - Fair adherence (0.90), slow latency (60h, SLOW), low trust (60)
+      → 0.5 × 0.60 × 0.81 × 0.90 × 0.95 = 0.2078 (-58% from base)
     
-    - Poor adherence (0.70), very slow (96h), low trust (50)
-      → 0.5 × 0.50 × 0.49 × 0.85 = 0.1041 (-79% from base)
-      >> Operator sees dramatic reduction, strong incentive to improve
+    - Poor adherence (0.70), stalled (96h, STALLED), low trust (50)
+      → 0.5 × 0.50 × 0.49 × 0.85 × 0.0 = 0.0 (BLOCKED next cycle)
+      >> No token allocation next cycle, strong incentive to fix
     
     Args:
         trust_score: Operator integrity score (0-100)
         adherence: Cash remitted / expected_revenue for last cycle
         lag_hours: Time in hours from allocation to cash receipt
         base_rate: Maximum achievable advance rate (clamped upper bound)
+        turnover_classification: Cycle velocity classification
     
     Returns:
         float: Effective advance rate (0.0 to base_rate)
@@ -437,9 +497,10 @@ def compute_per_cycle_advance_rate(
     factor_trust = trust_score / 100.0
     factor_adherence = clamped_adherence ** 2  # Quadratic penalty drives behavior change
     factor_latency = latency_penalty(lag_hours)
+    factor_turnover = turnover_penalty(turnover_classification)
     
     # Compute final rate
-    effective_rate = base_rate * factor_trust * factor_adherence * factor_latency
+    effective_rate = base_rate * factor_trust * factor_adherence * factor_latency * factor_turnover
     
     # Clamp to [0.0, base_rate] to ensure penalties never exceed base
     return max(0.0, min(base_rate, effective_rate))
