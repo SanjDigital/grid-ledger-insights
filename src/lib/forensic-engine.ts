@@ -260,3 +260,18 @@ export function computeForensics(
     authority,
   };
 }
+
+export function getTurnoverInfo(event: VerifiedEvent): {
+  hours: number | null;
+  classification: 'FAST' | 'NORMAL' | 'SLOW' | 'STALLED';
+  colorClass: string;
+} {
+  if (!event.airtelTimestamp || event.verification === 'gap') {
+    return { hours: null, classification: 'STALLED', colorClass: 'text-muted-foreground' };
+  }
+  const hours = (new Date(event.airtelTimestamp).getTime() - new Date(event.timestamp).getTime()) / (1000 * 3600);
+  if (hours < 12) return { hours, classification: 'FAST', colorClass: 'text-[hsl(var(--sovereign))]' };
+  if (hours < 24) return { hours, classification: 'NORMAL', colorClass: 'text-[hsl(var(--under-review))]' };
+  if (hours < 48) return { hours, classification: 'SLOW', colorClass: 'text-destructive' };
+  return { hours, classification: 'STALLED', colorClass: 'text-muted-foreground' };
+}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCircle2, AlertCircle, ShieldOff, ShieldCheck, FileSearch } from "lucide-react";
-import type { EnforcementVerdict, NextTokenState } from "@/lib/forensic-engine";
+import { getTurnoverInfo, type EnforcementVerdict, type NextTokenState } from "@/lib/forensic-engine";
+import { verifiedEvents } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
 import { useAuditTrail } from "./AuditTrailContext";
 
@@ -51,6 +52,8 @@ const STATE_CONFIG: Record<NextTokenState, {
 };
 
 export function EnforcementPanel({ verdict, isOwner = true, currentRootHash }: EnforcementPanelProps) {
+  const lastEvent = verifiedEvents.find(e => e.id === verdict.lastEventId);
+  const turnoverInfo = lastEvent ? getTurnoverInfo(lastEvent) : null;
   const { toast } = useToast();
   const { recordAction } = useAuditTrail();
   const [overridden, setOverridden] = useState(false);
@@ -86,10 +89,23 @@ export function EnforcementPanel({ verdict, isOwner = true, currentRootHash }: E
         <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">
           Enforcement · Next Token
         </p>
-        <span className="text-[9px] font-mono text-muted-foreground">
+        <p className="text-[9px] font-mono text-muted-foreground">
           {verdict.lastEventId ?? "—"}
-        </span>
+        </p>
       </div>
+
+      {turnoverInfo && (
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">
+            Turnover
+          </p>
+          <span className={`text-sm font-mono font-bold ${turnoverInfo.colorClass}`}>
+            {turnoverInfo.hours !== null ? `${turnoverInfo.hours.toFixed(0)}h` : "—"} ({turnoverInfo.classification})
+            {turnoverInfo.classification === "STALLED" && verdict.state === "BLOCKED" && " 🔴 BLOCKED – no receipt within 48h"}
+            {turnoverInfo.classification !== "STALLED" && ` → Next token ${verdict.state}`}
+          </span>
+        </div>
+      )}
 
       <div className="flex items-start gap-3 mb-3">
         <Icon className={`w-7 h-7 shrink-0 mt-0.5 ${cfg.textClass}`} />

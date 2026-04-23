@@ -11,6 +11,7 @@ import { ReconciliationTimeline } from "@/components/dashboard/ReconciliationTim
 import { AuthorityStackPanel } from "@/components/dashboard/AuthorityStackPanel";
 import { EventDetailDrawer } from "@/components/dashboard/EventDetailDrawer";
 import { AuditTrailProvider } from "@/components/dashboard/AuditTrailContext";
+import { CycleVelocityPanel } from "@/components/dashboard/CycleVelocityPanel";
 import type { Mill, VerifiedEvent } from "@/lib/mock-data";
 
 const IndexContent = () => {
@@ -63,6 +64,7 @@ const IndexContent = () => {
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <AuditPanel data={currentForensic} isRedAlert={isRedAlert} perEventForensics={computed.perEvent} enforcement={computed.enforcement} />
+            <CycleVelocityPanel events={verifiedEvents} />
             <div className="space-y-5">
               <AuthorityStackPanel alignment={computed.authority} />
               <ReconciliationTimeline events={verifiedEvents} />

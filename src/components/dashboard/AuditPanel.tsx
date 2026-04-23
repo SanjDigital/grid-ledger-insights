@@ -1,10 +1,11 @@
-import { type ForensicData } from "@/lib/mock-data";
+import { type ForensicData, VerifiedEvent, verifiedEvents } from "@/lib/mock-data";
 import { type EventForensics, type EnforcementVerdict } from "@/lib/forensic-engine";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TrustGauge } from "./TrustGauge";
 import { EnforcementPanel } from "./EnforcementPanel";
 import { useAuditTrail } from "./AuditTrailContext";
-import { Lock, FileCheck, Cpu, TrendingDown, Shield, Landmark, Clock, Gauge, BarChart3, AlertTriangle, History } from "lucide-react";
+import { CycleVelocityPanel } from "./CycleVelocityPanel"; // Import CycleVelocityPanel
+import { Lock, FileCheck, Cpu, TrendingDown, Shield, Landmark, Clock, Gauge, BarChart3, AlertTriangle, History, ArrowRightLeft } from "lucide-react";
 
 interface AuditPanelProps {
   data: ForensicData;
@@ -36,6 +37,7 @@ export function AuditPanel({ data, isRedAlert, perEventForensics = [], enforceme
               { value: "forensic", label: "Forensic L0-4", icon: Cpu },
               { value: "trust", label: "Trust L5", icon: Shield },
               { value: "capital", label: "Capital L6", icon: Landmark },
+              { value: "velocity", label: "Cycle Velocity", icon: ArrowRightLeft },
               { value: "audit", label: "Audit Trail", icon: History },
             ].map(t => (
               <TabsTrigger
@@ -201,6 +203,10 @@ export function AuditPanel({ data, isRedAlert, perEventForensics = [], enforceme
               {isRedAlert ? "DECLINE / HIGH RISK" : data.trustTier === "INSTITUTIONAL" ? "APPROVE / INVESTMENT GRADE" : "CONDITIONAL / UNDER REVIEW"}
             </p>
           </div>
+        </TabsContent>
+
+        <TabsContent value="velocity" className="p-4 mt-0">
+          <CycleVelocityPanel events={verifiedEvents} />
         </TabsContent>
 
         <TabsContent value="audit" className="p-4 mt-0 space-y-3 max-h-[400px] overflow-y-auto scrollbar-terminal">

@@ -1,4 +1,5 @@
 import { VerifiedEvent } from "@/lib/mock-data";
+import { getTurnoverInfo } from "@/lib/forensic-engine";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, AlertCircle, Clock, RotateCcw } from "lucide-react";
 
@@ -68,6 +69,18 @@ export function ReconciliationTimeline({ events }: ReconciliationTimelineProps) 
                   {getStatusBadge(event.verification)}
                 </div>
                 <p className="text-[10px] font-mono text-muted-foreground">{event.timestamp}</p>
+                {(() => {
+                  const turnover = getTurnoverInfo(event);
+                  return turnover.hours !== null ? (
+                    <span className={`text-[10px] font-mono font-bold ${turnover.colorClass}`}>
+                      {turnover.hours.toFixed(0)}h ({turnover.classification})
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      — STALLED
+                    </span>
+                  );
+                })()}
               </div>
             </div>
             

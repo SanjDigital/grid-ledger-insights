@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Check, X, AlertTriangle, Flag } from "lucide-react";
 import type { VerifiedEvent, ForensicData } from "@/lib/mock-data";
+import { getTurnoverInfo } from "@/lib/forensic-engine";
 import type { EventForensics } from "@/lib/forensic-engine";
 import { useAuditTrail } from "./AuditTrailContext";
 
@@ -59,6 +60,8 @@ export function EventDetailDrawer({ event, forensic, baseForensic, open, onOpenC
   const cashGap = Math.max(0, Math.round(event.kwh * 1350) - event.reportedCash); // expected cash heuristic
   const earLocal = event.meteredKwh > 0 ? (event.kwh / event.meteredKwh) * 100 : 0;
   const cashOk = event.verification !== "gap" && event.reportedCash > 0;
+  const turnoverInfo = getTurnoverInfo(event);
+  const capitalEfficiency = turnoverInfo.hours !== null ? (365 * 24) / turnoverInfo.hours / 52 : 0;
 
   const handleReportDiscrepancy = () => {
     recordAction("discrepancy_report", event.tokenId, "Manual discrepancy report filed by operator", latestRootHash);
@@ -168,6 +171,14 @@ export function EventDetailDrawer({ event, forensic, baseForensic, open, onOpenC
             <span className="text-muted-foreground">Cash Gap</span>
             <span className={`tabular text-right ${cashGap > 5000 ? "text-destructive" : "text-foreground"}`}>
               {event.currency}{cashGap.toLocaleString()}
+            </span>
+            <span className="text-muted-foreground">Turnover Time</span>
+            <span className={`tabular text-right ${turnoverInfo.colorClass}`}>
+              {turnoverInfo.hours !== null ? `${turnoverInfo.hours.toFixed(0)}h (${turnoverInfo.classification})` : "—"}
+            </span>
+            <span className="text-muted-foreground">Capital Efficiency</span>
+            <span className="tabular text-right text-primary">
+              {capitalEfficiency.toFixed(1)}x
             </span>
           </div>
         </section>
