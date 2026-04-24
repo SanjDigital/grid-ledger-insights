@@ -165,6 +165,9 @@ class Cycle(SQLModel, table=True):
     gap_breach_detected: bool = Field(default=False)
     gap_breach_details: Optional[str] = None
     reconciled_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    cycle_number: Optional[int] = Field(default=None, index=True)  # Sequential cycle identifier
+    previous_seal: Optional[str] = Field(default=None)  # Previous cycle's seal for chain integrity
+    cycle_seal: Optional[str] = Field(default=None)  # This cycle's SHA256 seal
 
 
 class ReconciliationRecord(SQLModel, table=True):
@@ -187,6 +190,7 @@ class ReconciliationRecord(SQLModel, table=True):
 
     __table_args__ = (
         CheckConstraint("root_hash != ''", name="check_root_hash_not_empty"),
+        Index("ix_recon_mill_timestamp", "mill_id", "created_at"),  # For 30-day rolling queries
     )
 
 
@@ -310,6 +314,10 @@ class TokenAllocation(SQLModel, table=True):
     resolved_at: Optional[datetime] = None
     resolution_notes: Optional[str] = None
     
+    # Cycle seal tracking (for external anchor verification)
+    cycle_number: Optional[int] = Field(default=None)  # Sequential cycle identifier
+    cycle_seal: Optional[str] = Field(default=None)  # SHA256 seal computed at cycle closure
+    
     # Relationships
     cash_receipts: list["CashReceipt"] = Relationship(back_populates="allocation")
     
@@ -377,6 +385,148 @@ class IdempotencyRecord(SQLModel, table=True):
     response_json: str  # JSON serialized AllocationDecisionResponse
     allocation_id: Optional[int] = Field(default=None, foreign_key="token_allocations.id")
     expires_at: datetime  # TTL (24h)
+
+
+# 10. Per-Mill Observation Configuration (Phase 1)
+class MillObservationConfig(SQLModel, table=True):
+    """
+    Stores per-mill observation bands and enforcement status.
+    
+    Enables progressive enforcement: observe first (5-10 cycles), then lock
+    a mill-specific band for effective_rate_per_kwh anomaly detection.
+    
+    Workflow:
+    1. Deploy with enforcement_status="OBSERVING"
+    2. Collect 5-10 baseline cycles
+    3. Calculate band: median ± 2 std deviations
+    4. Lock in this table and set enforcement_status="ACTIVE"
+    5. From next cycle: out-of-band → decision_basis.reason="EFFECTIVE_RATE_ANOMALY"
+    """
+    __tablename__ = "mill_observation_configs"
+    
+    mill_id: str = Field(primary_key=True, foreign_key="mill.id")
+    
+    # Observation phase metadata
+    observation_start_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    cycles_observed: int = Field(default=0)  # Count of cycles in observation window
+    
+    # Enforcement band (locked after observation phase)
+    effective_rate_band_low: Optional[float] = None   # e.g., 1,340 for Nabiwi
+    effective_rate_band_high: Optional[float] = None  # e.g., 1,360 for Nabiwi
+    band_median: Optional[float] = None
+    band_stddev: Optional[float] = None
+    
+    # Status and metadata
+    enforcement_status: str = Field(default="OBSERVING")  # OBSERVING | ACTIVE | SUSPENDED
+    last_rate_observed: Optional[float] = None
+    last_rate_timestamp: Optional[datetime] = None
+    forensic_film_date: Optional[datetime] = None  # When manual validation occurred
+    forensic_film_notes: Optional[str] = None
+    
+    # Audit trail
+    band_locked_at: Optional[datetime] = None
+    locked_by: Optional[str] = None  # Admin or system identifier
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    __table_args__ = (
+        CheckConstraint(
+            "enforcement_status IN ('OBSERVING', 'ACTIVE', 'SUSPENDED')",
+            name="check_observation_status"
+        ),
+        Index("ix_mill_obs_status", "enforcement_status"),  # Fast query for active mills
+    )
+
+
+# 11. Tariff Rate History (Cost Accounting)
+class TariffRate(SQLModel, table=True):
+    """
+    Immutable append-only ledger of historical owner energy costs.
+    
+    Tracks MERA tariff rate changes for owner P&L analysis and cost accounting.
+    NOT used in enforcement (enforcement uses Mill.revenue_rate_per_kwh instead).
+    
+    Example: MERA ET7 tariff change on 2026-01-19 from 253.70 to 284.15 MK/kWh.
+    
+    Enables queries like:
+    - Historical cost basis per quarter
+    - Profit margin analysis (revenue_rate - energy_cost) × kWh
+    - MERA rate volatility tracking
+    """
+    __tablename__ = "tariff_rates"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    mill_id: str = Field(foreign_key="mill.id", index=True)
+    
+    # Rate information
+    rate_mk_per_kwh: float  # e.g., 284.15 for MERA ET7 Jan 2026
+    effective_date: datetime  # When this rate becomes active
+    
+    # Metadata
+    set_by: str  # e.g., "MERA_ADMIN", "SYSTEM", operator identifier
+    notes: Optional[str] = None  # e.g., "MERA Jan 2026 adjustment: +12.0%"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    __table_args__ = (
+        Index("ix_tariff_rate_mill_date", "mill_id", "effective_date"),  # For time-series queries
+        CheckConstraint("rate_mk_per_kwh > 0", name="check_rate_positive"),
+    )
+
+
+# 12. Portfolio Anomaly Log (Phase 2)
+class PortfolioAnomalyLog(SQLModel, table=True):
+    """
+    Logs multi-meter anomalies detected at portfolio level.
+    
+    Surfaces patterns that cannot be detected by single-meter analysis:
+    - Coordinated blackouts across multiple meters (e.g., 6-meter sync Jun 2025)
+    - Correlated variance spikes
+    - Operator-level patterns (same person operating multiple mills)
+    
+    Implementation: backend/portfolio_engine.py (Phase 2)
+    
+    Example: 2025-06-15 four Nabiwi meters lost power simultaneously, flagged
+    as portfolio anomaly (not noise, not coincidence).
+    """
+    __tablename__ = "portfolio_anomaly_logs"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # Anomaly metadata
+    anomaly_type: str  # e.g., "SYNC_BLACKOUT", "CORRELATED_VARIANCE", "OPERATOR_PATTERN"
+    severity_level: int = Field(default=1)  # 1 (low) to 4 (critical)
+    
+    # Correlation data
+    operator_id: Optional[str] = Field(default=None, index=True)  # If operator-related
+    mill_ids: str  # CSV or JSON list of affected mill IDs
+    correlation_score: float  # 0.0 to 1.0 (confidence in anomaly)
+    
+    # Event details
+    event_window_start: datetime  # When anomaly window began
+    event_window_end: datetime    # When anomaly window ended
+    event_description: str        # Human-readable summary
+    
+    # Verification
+    escom_outage_match: Optional[str] = None  # Known ESCOM outage ID, if matched
+    false_positive_flag: bool = Field(default=False)  # Manually marked as false positive
+    
+    # Audit trail
+    detected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    
+    __table_args__ = (
+        Index("ix_anomaly_type_date", "anomaly_type", "detected_at"),
+        Index("ix_anomaly_operator", "operator_id"),
+        CheckConstraint(
+            "severity_level >= 1 AND severity_level <= 4",
+            name="check_severity_level"
+        ),
+        CheckConstraint(
+            "correlation_score >= 0.0 AND correlation_score <= 1.0",
+            name="check_correlation_score"
+        ),
+    )
 
 
 # Database Setup

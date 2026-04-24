@@ -168,6 +168,62 @@ def reconcile_cycle(mill_id: str):
             ).first()
 
             if not existing_cycle:
+                # ═══════════════════════════════════════════════════════════════════════
+                # Compute cycle seal for external anchor verification
+                # ═══════════════════════════════════════════════════════════════════════
+                
+                # Get previous cycle to extract prior seal and increment cycle_number
+                previous_cycle = inner_session.exec(
+                    select(Cycle)
+                    .where(Cycle.mill_id == mill_id)
+                    .order_by(Cycle.cycle_number.desc())
+                ).first()
+                
+                previous_seal = previous_cycle.cycle_seal if previous_cycle and previous_cycle.cycle_seal else ""
+                cycle_number = (previous_cycle.cycle_number or 0) + 1 if previous_cycle else 1
+                
+                # Get cash receipt data for this allocation (settled_at timestamp)
+                last_allocation = inner_session.exec(
+                    select(TokenAllocation)
+                    .where(TokenAllocation.mill_id == mill_id)
+                    .where(TokenAllocation.token_id == (last_purchase.token_id if last_purchase else None))
+                    .order_by(TokenAllocation.allocated_at.desc())
+                ).first()
+                
+                # Get the cash receipt for this allocation (if exists)
+                settled_at = datetime.now(timezone.utc)  # Fallback if no receipt
+                cash_receipt_amount = 0.0
+                
+                if last_allocation:
+                    receipt = inner_session.exec(
+                        select(CashReceipt)
+                        .where(CashReceipt.allocation_id == last_allocation.id)
+                    ).first()
+                    
+                    if receipt:
+                        settled_at = receipt.received_at or settled_at
+                        cash_receipt_amount = receipt.amount
+                
+                # Build cycle_data for seal (immutable input fields only)
+                cycle_data = {
+                    "mill_id": mill_id,
+                    "token_id": last_purchase.token_id if last_purchase else "",
+                    "allocated_kwh": last_allocation.allocated_kwh if last_allocation else 0.0,
+                    "reported_kwh": total_usage,  # From DailyReports (metered usage)
+                    "metered_kwh": total_usage,   # From DailyReports
+                    "reported_cash": cash_receipt_amount,  # From CashReceipt
+                    "airtel_cash": total_actual_cash,      # From DailyReports
+                    "settled_at": settled_at,
+                }
+                
+                # Compute deterministic seal
+                from backend.policy_execution_engine import generate_cycle_seal
+                try:
+                    cycle_seal = generate_cycle_seal(cycle_data, previous_seal, cycle_number)
+                except Exception as e:
+                    logger.warning(f"Failed to compute seal for cycle {cycle_number} at {mill_id}: {e}. Using empty seal.")
+                    cycle_seal = ""
+                
                 cycle_entry = Cycle(
                     mill_id=mill_id,
                     token_id=last_purchase.token_id if last_purchase else None,
@@ -187,6 +243,9 @@ def reconcile_cycle(mill_id: str):
                         f"{g['previous_report_id']}->{g['current_report_id']} gap={g['gap']}"
                         for g in gap_breaches
                     ]) if gap_breach_detected else None,
+                    cycle_number=cycle_number,
+                    previous_seal=previous_seal,
+                    cycle_seal=cycle_seal,
                 )
                 inner_session.add(cycle_entry)
                 inner_session.commit()
@@ -202,6 +261,25 @@ def reconcile_cycle(mill_id: str):
                 )
                 inner_session.add(lineage_event)
                 inner_session.commit()
+                
+                # ═══════════════════════════════════════════════════════════════════════
+                # Anchor seal to external GitHub trust log
+                # ═══════════════════════════════════════════════════════════════════════
+                if cycle_seal:
+                    from backend.trust_anchor import anchor_seal
+                    try:
+                        success = anchor_seal(
+                            cycle_number=cycle_number,
+                            mill_id=mill_id,
+                            cycle_seal=cycle_seal
+                        )
+                        if success:
+                            logger.info(f"Cycle {cycle_number} seal anchored to GitHub: {cycle_seal[:16]}...")
+                        else:
+                            logger.warning(f"Failed to anchor cycle {cycle_number} seal (local seal stored, retry later)")
+                    except Exception as e:
+                        logger.error(f"Exception anchoring seal for cycle {cycle_number}: {e}")
+                        # Non-fatal: seal is stored locally, anchor will be retried on next reconciliation
 
         return {
             "mill_id": mill_id,

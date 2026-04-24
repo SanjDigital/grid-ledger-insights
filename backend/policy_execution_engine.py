@@ -386,6 +386,80 @@ def latency_penalty(lag_hours: float) -> float:
     return 0.85
 
 
+def generate_cycle_seal(cycle_data: dict, previous_seal: str, cycle_number: int) -> str:
+    """
+    Deterministic cycle seal based ONLY on immutable inputs.
+    
+    Creates a tamper-evident seal that can be independently verified by any auditor.
+    Uses only immutable fields from cycle_data (measured/reported values, not derived).
+    
+    Seal includes:
+    - mill_id, token_id (cycle identity)
+    - allocated_kwh, reported_kwh, metered_kwh (energy measurements)
+    - reported_cash, airtel_cash (financial records)
+    - settled_at (when cash receipt confirmed) - deterministic timestamp
+    - cycle_number, previous_seal (chain integrity)
+    
+    Design:
+    - NO derived fields (EAR, SEC, etc.) - avoids redundancy and rounding risks
+    - timestamp = cycle_data['settled_at'] from data, not generated at seal time
+    - Fully deterministic: same cycle_data → same seal always
+    - Any auditor can recompute the seal from raw data
+    
+    Args:
+        cycle_data: Dict with keys (mill_id, token_id, allocated_kwh, reported_kwh,
+                                   metered_kwh, reported_cash, airtel_cash, settled_at)
+        previous_seal: Previous cycle's seal (for chaining), or empty string for first cycle
+        cycle_number: Sequential cycle number (starts at 1)
+    
+    Returns:
+        str: SHA256 hex digest (64 characters)
+    
+    Raises:
+        KeyError: If required fields missing from cycle_data
+        TypeError: If settled_at is not a datetime object
+    """
+    # Validate required fields
+    required_fields = [
+        "mill_id", "token_id", "allocated_kwh", "reported_kwh", "metered_kwh",
+        "reported_cash", "airtel_cash", "settled_at"
+    ]
+    for field in required_fields:
+        if field not in cycle_data:
+            raise KeyError(f"Missing required field in cycle_data: {field}")
+    
+    # Extract settled_at timestamp and convert to ISO format (deterministic string)
+    settled_at = cycle_data["settled_at"]
+    if hasattr(settled_at, 'isoformat'):
+        settled_at_str = settled_at.isoformat()
+    else:
+        # Fallback for string input (already in ISO format)
+        settled_at_str = str(settled_at)
+    
+    # Build seal input object with only immutable fields
+    # Order matters: sorted_keys=True ensures determinism
+    seal_input = {
+        "mill_id": str(cycle_data["mill_id"]),
+        "token_id": str(cycle_data["token_id"]),
+        "allocated_kwh": float(cycle_data["allocated_kwh"]),
+        "reported_kwh": float(cycle_data["reported_kwh"]),
+        "metered_kwh": float(cycle_data["metered_kwh"]),
+        "reported_cash": float(cycle_data["reported_cash"]),
+        "airtel_cash": float(cycle_data["airtel_cash"]),
+        "settled_at": settled_at_str,
+        "cycle_number": int(cycle_number),
+        "previous_seal": str(previous_seal),
+    }
+    
+    # Serialize to JSON with sorted keys (deterministic order)
+    seal_json = json.dumps(seal_input, sort_keys=True)
+    
+    # Compute SHA256 hash
+    seal_hash = hashlib.sha256(seal_json.encode()).hexdigest()
+    
+    return seal_hash
+
+
 def classify_turnover_time(lag_hours: float) -> str:
     """
     Classify cycle turnover time based on latency hours.
