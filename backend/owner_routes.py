@@ -1074,7 +1074,26 @@ def get_decision_feed(
         ).all()
         
         for cycle in recent_cycles:
-            if cycle.anchor_status == "FAILED":
+            if cycle.anchor_status == "FAILED_PERMANENT":
+                # Permanent failure after max retries - requires manual intervention
+                issue = "SEAL_ANCHOR_PERMANENT_FAILED"
+                urgency = "CRITICAL"
+                priority = SEVERITY_WEIGHTS.get(issue, 150.0)  # Highest priority
+                feed.append(
+                    DecisionFeedItem(
+                        mill_id=mill.id,
+                        name=mill.name,
+                        issue=issue,
+                        detail=f"Cycle {cycle.cycle_number} seal anchor PERMANENTLY FAILED after 3 attempts. Seal stored locally. Manual intervention required - contact support immediately.",
+                        urgency=urgency,
+                        priority_score=priority,
+                        capital_at_risk=Decimal("0"),
+                        time_to_action_hours=0.0,
+                        recommended_action="URGENT: Contact support to manually replay anchor or verify GitHub availability.",
+                    )
+                )
+            elif cycle.anchor_status == "FAILED":
+                # Transient failure - retrying with backoff
                 issue = "SEAL_ANCHOR_FAILED"
                 urgency = "HIGH"
                 priority = SEVERITY_WEIGHTS.get(issue, 100.0)
@@ -1083,12 +1102,12 @@ def get_decision_feed(
                         mill_id=mill.id,
                         name=mill.name,
                         issue=issue,
-                        detail=f"Cycle {cycle.cycle_number} seal failed to anchor to GitHub after {cycle.anchor_retries} retries. Seal stored locally but external verification pending.",
+                        detail=f"Cycle {cycle.cycle_number} seal failed to anchor to GitHub (attempt {cycle.anchor_retries}/3). Seal stored locally, retrying with exponential backoff.",
                         urgency=urgency,
                         priority_score=priority,
                         capital_at_risk=Decimal("0"),
                         time_to_action_hours=0.0,
-                        recommended_action="Contact support. Retrigger anchor on next reconciliation or manual replay.",
+                        recommended_action="Monitor retry status. Will continue retrying automatically.",
                     )
                 )
             elif cycle.anchor_status == "PENDING":
@@ -1104,12 +1123,12 @@ def get_decision_feed(
                                 mill_id=mill.id,
                                 name=mill.name,
                                 issue=issue,
-                                detail=f"Cycle {cycle.cycle_number} seal pending GitHub anchor for {age_hours:.1f}h. Seal stored locally, retrying async.",
+                                detail=f"Cycle {cycle.cycle_number} seal pending GitHub anchor for {age_hours:.1f}h. Seal stored locally, retrying async with exponential backoff.",
                                 urgency=urgency,
                                 priority_score=priority,
                                 capital_at_risk=Decimal("0"),
                                 time_to_action_hours=0.0,
-                                recommended_action="Verify GitHub sync. Check background anchor worker status.",
+                                recommended_action="Verify GitHub sync. Check background anchor worker status and logs.",
                             )
                         )
 

@@ -4,6 +4,7 @@ from sqlmodel import Session, select, func
 import logging
 import json
 import threading
+import time
 from queue import Queue
 from scripts.init_db import engine, Mill, TokenPurchase, DailyReport, Cycle, WalletLineage, EventLog, Operator, MillIntegrityState, TokenAllocation, CashReceipt
 from backend.core_engine import Gatekeeper, AssetStatus
@@ -31,14 +32,23 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════
 
 anchor_queue = Queue()
+RETRY_CAP = 3  # Maximum retry attempts before permanent failure
+RETRY_DELAYS = {  # Exponential backoff delays (seconds)
+    0: 60,      # 1st failure: wait 60s
+    1: 300,     # 2nd failure: wait 5m
+    2: 600,     # 3rd failure: wait 10m
+}
 
 def anchor_worker():
     """
     Background worker: process cycle seals for GitHub anchoring (non-blocking).
     
     Runs as daemon thread. Pulls seals from queue and attempts to anchor them.
-    On failure, updates DB with anchor_status=FAILED and increments retries.
-    On success, updates DB with anchor_status=ANCHORED.
+    
+    Retry Logic:
+    - On failure: increment retries, apply exponential backoff
+    - After RETRY_CAP attempts: set to FAILED_PERMANENT (stop retrying)
+    - On success: set to ANCHORED
     """
     while True:
         try:
@@ -58,22 +68,56 @@ def anchor_worker():
                     if cycle:
                         if success:
                             cycle.anchor_status = "ANCHORED"
-                            logger.info(f"Cycle {item['cycle_number']} anchored successfully")
-                        else:
-                            cycle.anchor_status = "FAILED"
                             cycle.anchor_retries = (cycle.anchor_retries or 0) + 1
-                            logger.warning(f"Cycle {item['cycle_number']} anchor failed, retries={cycle.anchor_retries}")
+                            logger.info(f"Cycle {item['cycle_number']} anchored successfully (attempt {cycle.anchor_retries})")
+                        else:
+                            cycle.anchor_retries = (cycle.anchor_retries or 0) + 1
+                            
+                            # Check if retry cap exceeded
+                            if cycle.anchor_retries >= RETRY_CAP:
+                                cycle.anchor_status = "FAILED_PERMANENT"
+                                logger.error(f"Cycle {item['cycle_number']} anchor FAILED after {RETRY_CAP} attempts - permanent failure")
+                            else:
+                                cycle.anchor_status = "PENDING"
+                                delay_seconds = RETRY_DELAYS.get(cycle.anchor_retries - 1, 600)
+                                logger.warning(f"Cycle {item['cycle_number']} anchor failed (attempt {cycle.anchor_retries}/{RETRY_CAP}), will retry in {delay_seconds}s")
+                                
+                                # Apply exponential backoff: re-queue after delay
+                                def delayed_requeue():
+                                    time.sleep(delay_seconds)
+                                    anchor_queue.put(item)
+                                
+                                retry_thread = threading.Thread(target=delayed_requeue, daemon=True)
+                                retry_thread.start()
+                        
                         session.add(cycle)
                         session.commit()
             except Exception as e:
                 logger.error(f"Exception anchoring cycle {item['cycle_number']}: {e}", exc_info=True)
-                # Try to update DB
+                # Try to update DB with failure
                 try:
                     with Session(engine) as session:
                         cycle = session.get(Cycle, item["cycle_id"])
                         if cycle:
-                            cycle.anchor_status = "FAILED"
                             cycle.anchor_retries = (cycle.anchor_retries or 0) + 1
+                            
+                            # Check if retry cap exceeded
+                            if cycle.anchor_retries >= RETRY_CAP:
+                                cycle.anchor_status = "FAILED_PERMANENT"
+                                logger.error(f"Cycle {item['cycle_number']} anchor FAILED after {RETRY_CAP} attempts - permanent failure")
+                            else:
+                                cycle.anchor_status = "PENDING"
+                                delay_seconds = RETRY_DELAYS.get(cycle.anchor_retries - 1, 600)
+                                logger.warning(f"Cycle {item['cycle_number']} exception (attempt {cycle.anchor_retries}/{RETRY_CAP}), will retry in {delay_seconds}s")
+                                
+                                # Apply exponential backoff: re-queue after delay
+                                def delayed_requeue():
+                                    time.sleep(delay_seconds)
+                                    anchor_queue.put(item)
+                                
+                                retry_thread = threading.Thread(target=delayed_requeue, daemon=True)
+                                retry_thread.start()
+                            
                             session.add(cycle)
                             session.commit()
                 except Exception as db_err:
@@ -85,6 +129,36 @@ def anchor_worker():
 _anchor_thread = threading.Thread(target=anchor_worker, daemon=True)
 _anchor_thread.start()
 logger.info("Anchor worker thread started")
+
+
+def requeue_pending_anchors():
+    """
+    On backend startup, re-queue all cycles with anchor_status='PENDING'.
+    
+    This prevents loss of pending anchors on backend restart.
+    """
+    try:
+        with Session(engine) as session:
+            pending = session.exec(
+                select(Cycle).where(Cycle.anchor_status == "PENDING")
+            ).all()
+            
+            for cycle in pending:
+                anchor_queue.put({
+                    "cycle_id": cycle.id,
+                    "cycle_number": cycle.cycle_number,
+                    "mill_id": cycle.mill_id,
+                    "previous_seal": cycle.previous_seal,
+                    "cycle_seal": cycle.cycle_seal
+                })
+            
+            if pending:
+                logger.info(f"Re-queued {len(pending)} pending anchors on startup")
+            else:
+                logger.debug("No pending anchors to re-queue")
+    except Exception as e:
+        logger.error(f"Failed to re-queue pending anchors: {e}", exc_info=True)
+
 
 
 

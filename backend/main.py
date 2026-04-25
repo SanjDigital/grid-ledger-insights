@@ -195,7 +195,10 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 def start_scheduler():
     """Start APScheduler for background jobs (detect_missing_cycles every 24 hours)."""
-    from backend.cycle_manager import detect_missing_cycles
+    from backend.cycle_manager import detect_missing_cycles, requeue_pending_anchors
+    
+    # Re-queue any pending anchors from previous backend runs
+    requeue_pending_anchors()
     
     scheduler.add_job(
         func=detect_missing_cycles,
