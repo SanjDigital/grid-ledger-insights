@@ -30,6 +30,7 @@ from scripts.init_db import (
     TokenAllocation,
     DecisionAudit,
     IdempotencyRecord,
+    Cycle,
     engine,
 )
 from backend.config import MISSING_CYCLE_TIMEOUT_HOURS
@@ -1061,6 +1062,56 @@ def get_decision_feed(
                     recommended_action="Review receipt variance. Confirm or dispute with operator.",
                 )
             )
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # Check for stalled anchor operations (failed seals or prolonged pending)
+        # ═══════════════════════════════════════════════════════════════════════
+        recent_cycles = session.exec(
+            select(Cycle)
+            .where(Cycle.mill_id == mill.id)
+            .order_by(Cycle.id.desc())
+            .limit(5)
+        ).all()
+        
+        for cycle in recent_cycles:
+            if cycle.anchor_status == "FAILED":
+                issue = "SEAL_ANCHOR_FAILED"
+                urgency = "HIGH"
+                priority = SEVERITY_WEIGHTS.get(issue, 100.0)
+                feed.append(
+                    DecisionFeedItem(
+                        mill_id=mill.id,
+                        name=mill.name,
+                        issue=issue,
+                        detail=f"Cycle {cycle.cycle_number} seal failed to anchor to GitHub after {cycle.anchor_retries} retries. Seal stored locally but external verification pending.",
+                        urgency=urgency,
+                        priority_score=priority,
+                        capital_at_risk=Decimal("0"),
+                        time_to_action_hours=0.0,
+                        recommended_action="Contact support. Retrigger anchor on next reconciliation or manual replay.",
+                    )
+                )
+            elif cycle.anchor_status == "PENDING":
+                # Check if pending for >24 hours
+                if cycle.created_at:
+                    age_hours = (datetime.now(timezone.utc) - cycle.created_at).total_seconds() / 3600.0
+                    if age_hours > 24:
+                        issue = "SEAL_ANCHOR_PENDING"
+                        urgency = "MEDIUM"
+                        priority = SEVERITY_WEIGHTS.get(issue, 80.0)
+                        feed.append(
+                            DecisionFeedItem(
+                                mill_id=mill.id,
+                                name=mill.name,
+                                issue=issue,
+                                detail=f"Cycle {cycle.cycle_number} seal pending GitHub anchor for {age_hours:.1f}h. Seal stored locally, retrying async.",
+                                urgency=urgency,
+                                priority_score=priority,
+                                capital_at_risk=Decimal("0"),
+                                time_to_action_hours=0.0,
+                                recommended_action="Verify GitHub sync. Check background anchor worker status.",
+                            )
+                        )
 
     feed.sort(key=lambda x: -x.priority_score)
     return feed

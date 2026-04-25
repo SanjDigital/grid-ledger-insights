@@ -3,6 +3,8 @@ from typing import Optional
 from sqlmodel import Session, select, func
 import logging
 import json
+import threading
+from queue import Queue
 from scripts.init_db import engine, Mill, TokenPurchase, DailyReport, Cycle, WalletLineage, EventLog, Operator, MillIntegrityState, TokenAllocation, CashReceipt
 from backend.core_engine import Gatekeeper, AssetStatus
 from backend.identity_manager import IdentityManager, IdentityError, ReplayError
@@ -23,6 +25,67 @@ class FiduciaryLockError(Exception):
 
 
 logger = logging.getLogger(__name__)
+
+# ═══════════════════════════════════════════════════════════════════════
+# Async Anchor Queue (Non-Blocking GitHub Push)
+# ═══════════════════════════════════════════════════════════════════════
+
+anchor_queue = Queue()
+
+def anchor_worker():
+    """
+    Background worker: process cycle seals for GitHub anchoring (non-blocking).
+    
+    Runs as daemon thread. Pulls seals from queue and attempts to anchor them.
+    On failure, updates DB with anchor_status=FAILED and increments retries.
+    On success, updates DB with anchor_status=ANCHORED.
+    """
+    while True:
+        try:
+            item = anchor_queue.get()
+            try:
+                from backend.trust_anchor import anchor_seal
+                success = anchor_seal(
+                    cycle_number=item["cycle_number"],
+                    mill_id=item["mill_id"],
+                    previous_seal=item["previous_seal"],
+                    cycle_seal=item["cycle_seal"]
+                )
+                
+                # Update DB: set anchor status
+                with Session(engine) as session:
+                    cycle = session.get(Cycle, item["cycle_id"])
+                    if cycle:
+                        if success:
+                            cycle.anchor_status = "ANCHORED"
+                            logger.info(f"Cycle {item['cycle_number']} anchored successfully")
+                        else:
+                            cycle.anchor_status = "FAILED"
+                            cycle.anchor_retries = (cycle.anchor_retries or 0) + 1
+                            logger.warning(f"Cycle {item['cycle_number']} anchor failed, retries={cycle.anchor_retries}")
+                        session.add(cycle)
+                        session.commit()
+            except Exception as e:
+                logger.error(f"Exception anchoring cycle {item['cycle_number']}: {e}", exc_info=True)
+                # Try to update DB
+                try:
+                    with Session(engine) as session:
+                        cycle = session.get(Cycle, item["cycle_id"])
+                        if cycle:
+                            cycle.anchor_status = "FAILED"
+                            cycle.anchor_retries = (cycle.anchor_retries or 0) + 1
+                            session.add(cycle)
+                            session.commit()
+                except Exception as db_err:
+                    logger.error(f"Failed to update cycle status in DB: {db_err}")
+        finally:
+            anchor_queue.task_done()
+
+# Start background worker thread (daemon mode - exits with main process)
+_anchor_thread = threading.Thread(target=anchor_worker, daemon=True)
+_anchor_thread.start()
+logger.info("Anchor worker thread started")
+
 
 
 def get_last_token_purchase(mill_id: str):
@@ -246,6 +309,8 @@ def reconcile_cycle(mill_id: str):
                     cycle_number=cycle_number,
                     previous_seal=previous_seal,
                     cycle_seal=cycle_seal,
+                    anchor_status="PENDING",  # Will be updated by background worker
+                    anchor_retries=0,
                 )
                 inner_session.add(cycle_entry)
                 inner_session.commit()
@@ -263,23 +328,19 @@ def reconcile_cycle(mill_id: str):
                 inner_session.commit()
                 
                 # ═══════════════════════════════════════════════════════════════════════
-                # Anchor seal to external GitHub trust log
+                # Enqueue seal for asynchronous GitHub anchoring (non-blocking)
                 # ═══════════════════════════════════════════════════════════════════════
-                if cycle_seal:
-                    from backend.trust_anchor import anchor_seal
-                    try:
-                        success = anchor_seal(
-                            cycle_number=cycle_number,
-                            mill_id=mill_id,
-                            cycle_seal=cycle_seal
-                        )
-                        if success:
-                            logger.info(f"Cycle {cycle_number} seal anchored to GitHub: {cycle_seal[:16]}...")
-                        else:
-                            logger.warning(f"Failed to anchor cycle {cycle_number} seal (local seal stored, retry later)")
-                    except Exception as e:
-                        logger.error(f"Exception anchoring seal for cycle {cycle_number}: {e}")
-                        # Non-fatal: seal is stored locally, anchor will be retried on next reconciliation
+                if cycle_seal and cycle_entry:
+                    # Enqueue for background processing
+                    # This returns immediately without blocking cycle closure
+                    anchor_queue.put({
+                        "cycle_id": cycle_entry.id,
+                        "cycle_number": cycle_number,
+                        "mill_id": mill_id,
+                        "previous_seal": previous_seal,
+                        "cycle_seal": cycle_seal,
+                    })
+                    logger.debug(f"Cycle {cycle_number} seal queued for GitHub anchoring")
 
         return {
             "mill_id": mill_id,

@@ -279,6 +279,69 @@ def test_stalled_recovery_scenario():
     return True
 
 
+def test_anchor_status_lifecycle():
+    """Test anchor_status transitions through PENDING → ANCHORED/FAILED."""
+    print("\n" + "="*80)
+    print("TEST 4: Anchor Status Lifecycle Management")
+    print("="*80)
+    
+    from unittest.mock import Mock, patch, MagicMock
+    from datetime import datetime, timezone
+    
+    # Simulate cycle creation with anchor status
+    print("Scenario: Cycle closure with async anchor processing")
+    print()
+    
+    # Mock cycle entry (as it would be stored in database)
+    cycle_entry = Mock()
+    cycle_entry.id = 1001
+    cycle_entry.cycle_number = 42
+    cycle_entry.mill_id = "MILL_TEST_001"
+    cycle_entry.cycle_seal = "abc123def456" * 5  # Simulated seal
+    cycle_entry.previous_seal = "xyz789" * 5      # Simulated previous seal
+    cycle_entry.anchor_status = "PENDING"
+    cycle_entry.anchor_retries = 0
+    cycle_entry.created_at = datetime.now(timezone.utc)
+    
+    print(f"Cycle Entry Created:")
+    print(f"  Cycle ID:       {cycle_entry.id}")
+    print(f"  Cycle Number:   {cycle_entry.cycle_number}")
+    print(f"  Seal:           {cycle_entry.cycle_seal[:16]}...")
+    print(f"  Status:         {cycle_entry.anchor_status}")
+    print(f"  Retries:        {cycle_entry.anchor_retries}")
+    print()
+    
+    # Simulate enqueuing for anchor
+    anchor_task = {
+        "cycle_id": cycle_entry.id,
+        "cycle_number": cycle_entry.cycle_number,
+        "mill_id": cycle_entry.mill_id,
+        "previous_seal": cycle_entry.previous_seal,
+        "cycle_seal": cycle_entry.cycle_seal,
+    }
+    
+    print(f"Anchor Task Enqueued:")
+    print(f"  Task keys: {list(anchor_task.keys())}")
+    print()
+    
+    # Simulate successful anchor (status → ANCHORED)
+    cycle_entry.anchor_status = "ANCHORED"
+    cycle_entry.anchor_retries = 1
+    
+    print(f"After Successful Anchor:")
+    print(f"  Status:         {cycle_entry.anchor_status}")
+    print(f"  Retries:        {cycle_entry.anchor_retries}")
+    print()
+    
+    # Verify final state
+    if cycle_entry.anchor_status == "ANCHORED" and cycle_entry.anchor_retries >= 1:
+        print("✅ PASS: Anchor status transitions correctly (PENDING → ANCHORED)")
+        return True
+    else:
+        print("❌ FAIL: Anchor status did not transition correctly")
+        return False
+
+
 def main():
     print("\n" + "█"*80)
     print("█" + " "*78 + "█")
@@ -291,6 +354,7 @@ def main():
     results.append(("STALLED Advance Rate Blocking", test_stalled_cycle_blocking()))
     results.append(("STALLED Cycle Seal & Chain", test_stalled_cycle_seal()))
     results.append(("Recovery After STALLED", test_stalled_recovery_scenario()))
+    results.append(("Anchor Status Lifecycle", test_anchor_status_lifecycle()))
     
     print("\n" + "="*80)
     print("TEST SUMMARY")

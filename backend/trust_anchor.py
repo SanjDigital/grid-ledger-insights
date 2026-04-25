@@ -28,8 +28,29 @@ from datetime import datetime, timezone
 from typing import Optional
 import logging
 from pathlib import Path
+import hashlib
 
 logger = logging.getLogger(__name__)
+
+
+def anonymise_mill_id(mill_id: str) -> str:
+    """
+    Return SHA256 hex digest of mill_id for public anchoring.
+    
+    This allows us to anchor seals to a public GitHub repo without exposing
+    actual mill identities. Operator can verify their mill's seals using:
+    
+        anonymised = anonymise_mill_id("MILL_NABIWI_001")
+        # Then search for this hash in the public seal_log.csv
+    
+    Args:
+        mill_id: Original mill identifier
+    
+    Returns:
+        str: SHA256 hex (64 chars) of mill_id
+    """
+    return hashlib.sha256(mill_id.encode()).hexdigest()
+
 
 
 class TrustAnchor:
@@ -61,28 +82,32 @@ class TrustAnchor:
         if not self.repo_path.exists():
             logger.warning(f"Trust anchor repo not found at {repo_path}. Create repo and clone first.")
     
-    def append_seal(self, cycle_number: int, mill_id: str, cycle_seal: str) -> bool:
+    def append_seal(self, cycle_number: int, mill_id: str, previous_seal: str, cycle_seal: str) -> bool:
         """
-        Append cycle seal to CSV log and commit to GitHub.
+        Append cycle seal to CSV log and commit to GitHub (non-blocking).
         
         This is the main entry point for anchoring cycles externally.
         
         Args:
             cycle_number: Sequential cycle identifier
-            mill_id: Mill identifier
+            mill_id: Mill identifier (will be anonymised in public log)
+            previous_seal: Previous cycle's seal (for chain verification)
             cycle_seal: SHA256 hex digest from generate_cycle_seal()
         
         Returns:
             bool: True if successfully committed and pushed, False otherwise
         
         Side effects:
-        - Appends row to seal_log.csv
-        - Creates git commit with message "Seal cycle {cycle_number} for {mill_id}"
+        - Appends row to seal_log.csv (using anonymised mill_id)
+        - Creates git commit with message "Seal cycle {cycle_number}"
         - Pushes to origin/main
         
-        Auditor Reference:
-        - After success, return the commit hash: `git rev-parse HEAD`
-        - Auditor can verify at: {repo_url}/commit/{hash}
+        CSV Format (with anonymisation):
+            cycle_number, anonymised_mill_id, previous_seal, cycle_seal, timestamp
+            1, a1b2c3d4..., "", 9eb1c516..., 2026-04-24T10:30:00Z
+            2, a1b2c3d4..., 9eb1c516..., 568922ab..., 2026-04-24T14:15:00Z
+        
+        Auditor can verify seal chain using previous_seal without knowing mill identity.
         """
         try:
             # Validate repo exists
@@ -96,8 +121,11 @@ class TrustAnchor:
                 logger.error(f"Not a git repository: {self.repo_path}")
                 return False
             
-            # Timestamp for this seal anchor
-            timestamp = datetime.now(timezone.utc).isoformat()
+            # Anonymise mill ID
+            anonymised_mill_id = anonymise_mill_id(mill_id)
+            
+            # Timestamp in canonical UTC format
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             
             # Append to CSV
             file_exists = self.csv_path.exists()
@@ -105,10 +133,10 @@ class TrustAnchor:
                 writer = csv.writer(f)
                 if not file_exists:
                     # Write header row if new file
-                    writer.writerow(["cycle_number", "mill_id", "cycle_seal", "timestamp"])
-                writer.writerow([cycle_number, mill_id, cycle_seal, timestamp])
+                    writer.writerow(["cycle_number", "mill_id_hash", "previous_seal", "cycle_seal", "timestamp"])
+                writer.writerow([cycle_number, anonymised_mill_id, previous_seal, cycle_seal, timestamp])
             
-            logger.info(f"Appended seal to {self.csv_path}: cycle={cycle_number}, mill={mill_id}")
+            logger.info(f"Appended seal to {self.csv_path}: cycle={cycle_number}, mill_hash={anonymised_mill_id[:16]}...")
             
             # Git add CSV file
             try:
@@ -124,7 +152,7 @@ class TrustAnchor:
                 return False
             
             # Git commit
-            commit_msg = f"Seal cycle {cycle_number} for {mill_id}"
+            commit_msg = f"Seal cycle {cycle_number}"
             try:
                 result = subprocess.run(
                     ["git", "commit", "-m", commit_msg],
@@ -235,6 +263,7 @@ class TrustAnchor:
 def anchor_seal(
     cycle_number: int,
     mill_id: str,
+    previous_seal: str,
     cycle_seal: str,
     repo_path: str = "./gridledger-cycle-seals",
     csv_file: str = "seal_log.csv"
@@ -243,10 +272,12 @@ def anchor_seal(
     Convenience function: append cycle seal to GitHub trust log.
     
     This should be called during cycle reconciliation (after generate_cycle_seal).
+    Non-blocking: meant to be called from a background queue.
     
     Args:
         cycle_number: Sequential cycle identifier
         mill_id: Mill identifier
+        previous_seal: Previous cycle's seal (for chain)
         cycle_seal: SHA256 seal from generate_cycle_seal()
         repo_path: Path to cloned GitHub repo
         csv_file: CSV filename within repo
@@ -256,7 +287,7 @@ def anchor_seal(
     """
     try:
         anchor = TrustAnchor(repo_path=repo_path, csv_file=csv_file)
-        return anchor.append_seal(cycle_number, mill_id, cycle_seal)
+        return anchor.append_seal(cycle_number, mill_id, previous_seal, cycle_seal)
     except Exception as e:
         logger.error(f"Failed to anchor seal: {e}", exc_info=True)
         return False

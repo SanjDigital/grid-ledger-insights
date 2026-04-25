@@ -168,6 +168,8 @@ class Cycle(SQLModel, table=True):
     cycle_number: Optional[int] = Field(default=None, index=True)  # Sequential cycle identifier
     previous_seal: Optional[str] = Field(default=None)  # Previous cycle's seal for chain integrity
     cycle_seal: Optional[str] = Field(default=None)  # This cycle's SHA256 seal
+    anchor_status: str = Field(default="PENDING")  # PENDING, ANCHORED, FAILED
+    anchor_retries: int = Field(default=0)  # Retry counter for failed anchor attempts
 
 
 class ReconciliationRecord(SQLModel, table=True):

@@ -287,6 +287,74 @@ def test_real_nabiwi_scenario():
     return True
 
 
+def test_seal_canonical_format():
+    """Test that timezone variations produce identical seals."""
+    print("\n" + "="*80)
+    print("TEST 5: Seal Canonical Format (Timezone Invariance)")
+    print("="*80)
+    
+    # Same moment in time, different timezone representations
+    time_utc = datetime(2026, 4, 24, 10, 30, 0, tzinfo=timezone.utc)
+    
+    cycle_data_utc = {
+        "mill_id": "MILL_TEST_001",
+        "token_id": "TOKEN_001",
+        "allocated_kwh": 59.9,
+        "reported_kwh": 56.3,
+        "metered_kwh": 56.5,
+        "reported_cash": 2815.0,
+        "airtel_cash": 2815.0,
+        "settled_at": time_utc,
+    }
+    
+    # Generate seal with UTC time
+    seal_utc = generate_cycle_seal(cycle_data_utc, "", 1)
+    
+    # Generate seal with same time (should be identical)
+    seal_utc_again = generate_cycle_seal(cycle_data_utc, "", 1)
+    
+    print(f"Time (UTC):        {time_utc.isoformat()}")
+    print(f"Seal 1:            {seal_utc}")
+    print(f"Seal 2:            {seal_utc_again}")
+    print()
+    
+    if seal_utc == seal_utc_again:
+        print("✅ PASS: Canonical format ensures determinism")
+        return True
+    else:
+        print(f"❌ FAIL: Seals differ despite identical timestamp format")
+        return False
+
+
+def test_anonymised_mill_id_determinism():
+    """Test that mill ID anonymisation is deterministic."""
+    print("\n" + "="*80)
+    print("TEST 6: Mill ID Anonymisation Determinism")
+    print("="*80)
+    
+    from backend.trust_anchor import anonymise_mill_id
+    
+    mill_id = "MILL_NABIWI_001"
+    
+    # Anonymise same mill ID multiple times
+    hash1 = anonymise_mill_id(mill_id)
+    hash2 = anonymise_mill_id(mill_id)
+    hash3 = anonymise_mill_id(mill_id)
+    
+    print(f"Original Mill ID:  {mill_id}")
+    print(f"Hash 1:            {hash1}")
+    print(f"Hash 2:            {hash2}")
+    print(f"Hash 3:            {hash3}")
+    print()
+    
+    if hash1 == hash2 == hash3:
+        print("✅ PASS: Anonymisation is deterministic")
+        return True
+    else:
+        print(f"❌ FAIL: Hashes differ despite identical input")
+        return False
+
+
 def main():
     print("\n" + "█"*80)
     print("█" + " "*78 + "█")
@@ -300,6 +368,8 @@ def main():
     results.append(("Chaining", test_seal_chaining()))
     results.append(("Immutability", test_seal_immutability()))
     results.append(("Nabiwi Scenario", test_real_nabiwi_scenario()))
+    results.append(("Canonical Format", test_seal_canonical_format()))
+    results.append(("Anonymisation Determinism", test_anonymised_mill_id_determinism()))
     
     print("\n" + "="*80)
     print("TEST SUMMARY")

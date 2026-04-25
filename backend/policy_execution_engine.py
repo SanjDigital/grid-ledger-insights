@@ -428,13 +428,27 @@ def generate_cycle_seal(cycle_data: dict, previous_seal: str, cycle_number: int)
         if field not in cycle_data:
             raise KeyError(f"Missing required field in cycle_data: {field}")
     
-    # Extract settled_at timestamp and convert to ISO format (deterministic string)
+    # Extract settled_at timestamp and convert to canonical UTC format (deterministic)
     settled_at = cycle_data["settled_at"]
-    if hasattr(settled_at, 'isoformat'):
-        settled_at_str = settled_at.isoformat()
+    if hasattr(settled_at, 'strftime'):
+        # datetime object: convert to canonical UTC format (no microseconds, Z suffix)
+        # Ensure timezone-aware: convert to UTC if needed
+        if settled_at.tzinfo is None:
+            # Assume UTC if no timezone
+            settled_at = settled_at.replace(tzinfo=timezone.utc)
+        # Convert to UTC
+        settled_at_utc = settled_at.astimezone(timezone.utc)
+        # Format as canonical: YYYY-MM-DDTHH:MM:SSZ (no microseconds)
+        settled_at_str = settled_at_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     else:
-        # Fallback for string input (already in ISO format)
+        # String input: ensure it's in canonical format
         settled_at_str = str(settled_at)
+        # If it ends with +00:00, convert to Z
+        if settled_at_str.endswith("+00:00"):
+            settled_at_str = settled_at_str[:-6] + "Z"
+        # If it has microseconds, truncate
+        if "." in settled_at_str:
+            settled_at_str = settled_at_str.split(".")[0] + "Z" if settled_at_str.endswith("Z") else settled_at_str.split(".")[0]
     
     # Build seal input object with only immutable fields
     # Order matters: sorted_keys=True ensures determinism
@@ -445,14 +459,15 @@ def generate_cycle_seal(cycle_data: dict, previous_seal: str, cycle_number: int)
         "reported_kwh": float(cycle_data["reported_kwh"]),
         "metered_kwh": float(cycle_data["metered_kwh"]),
         "reported_cash": float(cycle_data["reported_cash"]),
-        "airtel_cash": float(cycle_data["airtel_cash"]),
+        "airtel_cash": float(cycle_data.get("airtel_cash", 0.0)),  # Default to 0 if missing
         "settled_at": settled_at_str,
         "cycle_number": int(cycle_number),
         "previous_seal": str(previous_seal),
     }
     
     # Serialize to JSON with sorted keys (deterministic order)
-    seal_json = json.dumps(seal_input, sort_keys=True)
+    # Use compact separators for minimal variation
+    seal_json = json.dumps(seal_input, sort_keys=True, separators=(',', ':'))
     
     # Compute SHA256 hash
     seal_hash = hashlib.sha256(seal_json.encode()).hexdigest()
