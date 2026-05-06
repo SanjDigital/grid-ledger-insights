@@ -21,7 +21,6 @@ export interface AnomalyFlag {
 }
 
 export interface VerifiedEvent {
-  airtelTimestamp?: string;
   id: string;
   timestamp: string;
   tokenId: string;
