@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, AlertCircle, ShieldOff, ShieldCheck, FileSearch } from "lucide-react";
+import { CheckCircle2, AlertCircle, ShieldOff, ShieldCheck, FileSearch, ZapOff } from "lucide-react";
 import { getTurnoverInfo, type EnforcementVerdict, type NextTokenState } from "@/lib/forensic-engine";
 import { verifiedEvents } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +48,15 @@ const STATE_CONFIG: Record<NextTokenState, {
     bgClass: "bg-destructive/10",
     borderClass: "border-destructive/40",
     glowClass: "shadow-[0_0_20px_-6px_hsl(var(--destructive)/0.5)]",
+  },
+  "INTERRUPTED (GRID)": {
+    label: "INTERRUPTED (GRID)",
+    glyph: "🟠",
+    icon: ZapOff,
+    textClass: "text-amber-500",
+    bgClass: "bg-amber-500/10",
+    borderClass: "border-amber-500/40",
+    glowClass: "shadow-[0_0_20px_-6px_rgb(245_158_11_/_0.5)]",
   },
 };
 

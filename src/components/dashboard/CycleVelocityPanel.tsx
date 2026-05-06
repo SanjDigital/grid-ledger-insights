@@ -80,7 +80,7 @@ export function CycleVelocityPanel({ events }: CycleVelocityPanelProps) {
             <div key={index} className="flex items-center justify-between">
               <span className="text-xs font-mono text-foreground">{cycle.date}:</span>
               <span className={`text-xs font-mono font-bold ${cycle.colorClass}`}>
-                {cycle.hours !== null ? `${cycle.hours.toFixed(0)}h` : "—"} {cycle.glyph} {cycle.classification}
+                {cycle.hours !== null ? `${cycle.hours.toFixed(0)}h` : "—"} {cycle.classification}
               </span>
             </div>
           ))}
