@@ -173,7 +173,7 @@ export function AuditPanel({ data, isRedAlert, perEventForensics = [], enforceme
 
         <TabsContent value="trust" className="p-4 mt-0">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-            <TrustGauge score={data.trustScore} isRedAlert={isRedAlert} />
+            <TrustGauge score={data.trustScore} isRedAlert={isRedAlert} ear={data.ear} />
             {enforcement && <EnforcementPanel verdict={enforcement} isOwner currentRootHash={latestRootHash} />}
           </div>
         </TabsContent>
