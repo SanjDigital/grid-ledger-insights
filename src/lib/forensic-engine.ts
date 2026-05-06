@@ -7,7 +7,7 @@ export interface EventForensics {
   earContribution: { reported: number; metered: number };
 }
 
-export type NextTokenState = "CLEARED" | "CONDITIONAL" | "BLOCKED";
+export type NextTokenState = "CLEARED" | "CONDITIONAL" | "BLOCKED" | "INTERRUPTED (GRID)";
 
 export interface EnforcementVerdict {
   state: NextTokenState;
@@ -94,18 +94,25 @@ export function computeForensics(
 
   if (baseForensic.physicsVariance > 2.0) systemState = "SUSPENDED";
 
-  // Trust score: start at 100, deductions
-  let trustScore = 100;
-  trustScore -= breachCount * 4; // -4 per SEC breach
-  trustScore -= Math.max(0, earGap - 3) * 2; // -2 per % gap beyond 3%
-  trustScore -= baseForensic.physicsVariance > 2.0 ? 20 : 0;
-  trustScore = Math.max(0, Math.min(100, trustScore));
+  // Trust score — Bounded Imperfection Doctrine: anchored to EAR tiers.
+  // Excludes ESCOM-confirmed grid outages from the EAR baseline (Q2 2026 Amendment 1).
+  const accountableEvents = events.filter(e => !e.gridOutage);
+  const accReported = accountableEvents.reduce((s, e) => s + e.kwh, 0);
+  const accMetered = accountableEvents.reduce((s, e) => s + e.meteredKwh, 0);
+  const accountableEar = accMetered > 0 ? (accReported / accMetered) * 100 : 100;
 
   let trustTier: TrustTier;
-  if (trustScore >= 85) trustTier = "INSTITUTIONAL";
-  else if (trustScore >= 70) trustTier = "COMMERCIAL";
-  else if (trustScore >= 50) trustTier = "SUBPRIME";
+  if (accountableEar >= 95) trustTier = "INSTITUTIONAL";
+  else if (accountableEar >= 90) trustTier = "COMMERCIAL";
+  else if (accountableEar >= 80) trustTier = "SUBPRIME";
   else trustTier = "HIGH RISK";
+
+  // Map EAR (80–100) → score (50–100), then apply breach deductions
+  let trustScore = 50 + Math.max(0, Math.min(20, accountableEar - 80)) * 2.5;
+  trustScore -= breachCount * 4;
+  trustScore -= baseForensic.physicsVariance > 2.0 ? 20 : 0;
+  trustScore = Math.max(0, Math.min(100, trustScore));
+  if (trustScore < 50 && trustTier !== "HIGH RISK") trustTier = "HIGH RISK";
 
   // Enforcement / Next Token derivation
   // Inspect most recent event (events assumed sorted desc by timestamp; otherwise pick max)
@@ -114,7 +121,15 @@ export function computeForensics(
   const lastForensic = last ? perEvent.find((p) => p.eventId === last.id) ?? null : null;
 
   let enforcement: EnforcementVerdict;
-  if (baseForensic.physicsVariance > 2.0) {
+  if (last?.gridOutage) {
+    enforcement = {
+      state: "INTERRUPTED (GRID)",
+      reason: "ESCOM grid outage on last cycle",
+      detail: `Cycle ${last.tokenId} interrupted by confirmed grid event. Excluded from Trust baseline (Q2 2026 Amendment 1). Next token resumes on grid restoration.`,
+      lastEventId: last.id,
+      canOverride: false,
+    };
+  } else if (baseForensic.physicsVariance > 2.0) {
     enforcement = {
       state: "BLOCKED",
       reason: "Variance >2% — manual review required",
