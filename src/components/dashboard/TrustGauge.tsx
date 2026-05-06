@@ -1,28 +1,33 @@
 interface TrustGaugeProps {
   score: number;
   isRedAlert: boolean;
+  ear?: number;
 }
 
-function getTierLabel(score: number): { tier: string; range: string } {
-  if (score >= 85) return { tier: "INSTITUTIONAL", range: "85–100" };
-  if (score >= 70) return { tier: "COMMERCIAL", range: "70–84" };
-  if (score >= 50) return { tier: "SUBPRIME", range: "50–69" };
-  return { tier: "HIGH RISK", range: "<50" };
+// Bounded Imperfection Doctrine — tiers anchored to EAR (accountable energy %)
+function getEarTier(ear: number): { tier: string; range: string } {
+  if (ear >= 95) return { tier: "INSTITUTIONAL", range: "EAR ≥ 95%" };
+  if (ear >= 90) return { tier: "COMMERCIAL", range: "EAR 90–95%" };
+  if (ear >= 80) return { tier: "SUBPRIME", range: "EAR 80–90%" };
+  return { tier: "HIGH RISK", range: "EAR < 80%" };
 }
 
-export function TrustGauge({ score, isRedAlert }: TrustGaugeProps) {
+export function TrustGauge({ score, isRedAlert, ear }: TrustGaugeProps) {
   const percentage = score;
   const circumference = 2 * Math.PI * 54;
   const dashOffset = circumference - (percentage / 100) * circumference;
-  const { tier, range } = getTierLabel(score);
+  const effectiveEar = ear ?? score;
+  const { tier, range } = getEarTier(effectiveEar);
+  const tierColorVar = isRedAlert
+    ? "--gap-detected"
+    : effectiveEar >= 95
+    ? "--sovereign"
+    : effectiveEar >= 90
+    ? "--under-review"
+    : "--gap-detected";
 
-  const color = isRedAlert
-    ? "hsl(var(--gap-detected))"
-    : score >= 85
-    ? "hsl(var(--sovereign))"
-    : score >= 70
-    ? "hsl(var(--under-review))"
-    : "hsl(var(--gap-detected))";
+  const color = `hsl(var(${tierColorVar}))`;
+  const tierTextClass = `text-[hsl(var(${tierColorVar}))]`;
 
   return (
     <div className="flex flex-col items-center py-4">
@@ -45,21 +50,17 @@ export function TrustGauge({ score, isRedAlert }: TrustGaugeProps) {
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`text-3xl font-mono font-bold tabular ${
-            isRedAlert ? "text-destructive" : score >= 85 ? "text-primary" : "text-[hsl(var(--under-review))]"
-          }`}>
+          <span className={`text-3xl font-mono font-bold tabular ${tierTextClass}`}>
             {score.toFixed(0)}
           </span>
           <span className="text-[10px] text-muted-foreground font-mono">/100</span>
         </div>
       </div>
 
-      <p className={`text-xs font-mono font-semibold mt-4 ${
-        isRedAlert ? "text-destructive" : score >= 85 ? "text-primary" : "text-[hsl(var(--under-review))]"
-      }`}>
+      <p className={`text-xs font-mono font-semibold mt-4 ${tierTextClass}`}>
         {tier}
       </p>
-      <p className="text-[10px] text-muted-foreground mt-1 font-mono">Score Range: {range}</p>
+      <p className="text-[10px] text-muted-foreground mt-1 font-mono">{range} · Bounded Imperfection</p>
     </div>
   );
 }
