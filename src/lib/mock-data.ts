@@ -36,6 +36,7 @@ export interface VerifiedEvent {
   revenueUplift?: number;
   yieldKg: number; // actual grain output measured by scale
   meteredKwh: number; // external meter reading (Layer 4 authority)
+  gridOutage?: boolean; // ESCOM-confirmed grid interruption (Q2 2026 Amendment 1)
 }
 
 export type SystemState = "VERIFIED" | "UNDER REVIEW" | "COMPROMISED" | "SUSPENDED";
@@ -104,6 +105,7 @@ export const verifiedEvents: VerifiedEvent[] = [
   { id: "evt-006", timestamp: "2024-03-15 08:11:06", airtelTimestamp: "2024-03-15 09:11:06", tokenId: "TKN-4F8A7", kwh: 60.5, reportedCash: 81675, currency: "K", verification: "sovereign", isPeakHour: true, revenueUplift: 14.9, yieldKg: 1525, meteredKwh: 65.3 },
   { id: "evt-007", timestamp: "2024-01-02 23:55:44", airtelTimestamp: "2024-01-03 00:55:44", tokenId: "TKN-3G7Z6", kwh: 55.8, reportedCash: 75330, currency: "K", verification: "gap", isPeakHour: false, yieldKg: 0, meteredKwh: 60.2, anomalies: [{ type: "holiday-heist", label: "HOLIDAY HEIST", detail: "Energy consumed on public holiday (Jan 2) with no production event" }] },
   { id: "evt-008", timestamp: "2024-03-14 22:40:12", airtelTimestamp: "2024-03-14 23:40:12", tokenId: "TKN-2H6Y5", kwh: 62.3, reportedCash: 84105, currency: "K", verification: "sovereign", isPeakHour: false, revenueUplift: 2.1, yieldKg: 1570, meteredKwh: 67.4 },
+  { id: "evt-009", timestamp: "2024-03-15 16:05:00", tokenId: "TKN-1J5X4", kwh: 0, reportedCash: 0, currency: "K", verification: "gap", isPeakHour: true, yieldKg: 0, meteredKwh: 0, gridOutage: true },
 ];
 
 export const energyVsCashData = [
