@@ -13,13 +13,13 @@ COPY backend/ backend/
 COPY scripts/ scripts/
 COPY data/ data/
 COPY create_test_mill.py .
-COPY entrypoint.sh .
+COPY start.py .
 
-# Make entrypoint executable
-RUN chmod +x entrypoint.sh
+# Make start script executable
+RUN chmod +x start.py
 
 # Environment variables (these will be set by Railway)
 ENV PYTHONUNBUFFERED=1
 
-# Use bash to execute the entrypoint script with proper environment variable expansion
-ENTRYPOINT ["/bin/bash", "entrypoint.sh"]
+# Run the Python start script which handles PORT environment variable
+CMD ["python", "start.py"]
