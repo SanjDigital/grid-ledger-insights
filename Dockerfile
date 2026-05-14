@@ -21,5 +21,5 @@ RUN chmod +x entrypoint.sh
 # Environment variables (these will be set by Railway)
 ENV PYTHONUNBUFFERED=1
 
-# Run via entrypoint script (shell form to enable PORT env var expansion)
-CMD ./entrypoint.sh
+# Run via entrypoint script (using sh -c to enable PORT env var expansion)
+CMD ["sh", "-c", "./entrypoint.sh"]
