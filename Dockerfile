@@ -20,7 +20,6 @@ RUN chmod +x entrypoint.sh
 
 # Environment variables (these will be set by Railway)
 ENV PYTHONUNBUFFERED=1
-ENV PORT=8000
 
 # Run via entrypoint script
 CMD ["./entrypoint.sh"]
