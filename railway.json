@@ -4,7 +4,7 @@
     "builder": "dockerfile"
   },
   "deploy": {
-    "startCommand": "python -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT",
+    "startCommand": "python start.py",
     "restartPolicyMaxRetries": 5,
     "restartPolicyWindowMs": 60000
   }
