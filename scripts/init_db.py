@@ -9,6 +9,11 @@ from sqlalchemy import CheckConstraint, Index, event
 from typing import Optional
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
+
+# Add parent directory to path so backend module can be imported
+# when running this script directly
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # 1. Define the Mill Table (The Assets)
 class Mill(SQLModel, table=True):
@@ -532,11 +537,40 @@ class PortfolioAnomalyLog(SQLModel, table=True):
 
 
 # Database Setup
+import os
+
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-sqlite_url = f"sqlite:///{DATA_DIR / 'gridledger.db'}"
-engine = create_engine(sqlite_url)
+# Support both Railway (PostgreSQL via DATABASE_URL) and local development (SQLite)
+database_url = os.environ.get("DATABASE_URL")
+
+if database_url:
+    # Railway provides postgres:// prefix; SQLAlchemy requires postgresql://
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    print(f"[INFO] Using external database: {database_url[:50]}...")
+    engine = create_engine(database_url)
+else:
+    # Local development: use SQLite
+    sqlite_url = f"sqlite:///{DATA_DIR / 'gridledger.db'}"
+    print(f"[INFO] Using local SQLite database: {sqlite_url}")
+    engine = create_engine(sqlite_url)
+
+# Import institutional governance models (GL-1) to register with SQLModel
+# This must happen after engine is created but before create_all() is called
+try:
+    from backend.institutional_models import (
+        MandateSubmission,
+        FrictionAnalytics,
+        DiscrepancyReport,
+        EnforcementAction,
+    )
+    print("[DEBUG] Institutional models imported and registered")
+except Exception as e:
+    print(f"[WARN] Could not import institutional models: {e}")
+    import traceback
+    traceback.print_exc()
 
 
 def create_db_and_tables() -> None:
