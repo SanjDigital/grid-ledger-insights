@@ -13,13 +13,9 @@ COPY backend/ backend/
 COPY scripts/ scripts/
 COPY data/ data/
 COPY create_test_mill.py .
-COPY entrypoint.sh .
-
-# Make entrypoint executable
-RUN chmod +x entrypoint.sh
 
 # Environment variables (these will be set by Railway)
 ENV PYTHONUNBUFFERED=1
 
-# Run via entrypoint script (using sh -c to enable PORT env var expansion)
-CMD ["sh", "-c", "./entrypoint.sh"]
+# Run FastAPI server with PORT environment variable support
+ENTRYPOINT ["sh", "-c", "python -m uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
