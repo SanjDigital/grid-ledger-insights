@@ -21,5 +21,5 @@ RUN chmod +x start.py
 # Environment variables (these will be set by Railway)
 ENV PYTHONUNBUFFERED=1
 
-# Use ENTRYPOINT to forcefully run the Python start script
-ENTRYPOINT ["python", "start.py"]
+# Run FastAPI through start.py which handles PORT environment variable
+CMD ["python", "start.py"]
