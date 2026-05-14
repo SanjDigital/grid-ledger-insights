@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Header, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from backend.api_reports import (
     get_mill_status,
@@ -9,6 +10,14 @@ from backend.api_reports import (
 )
 from backend.revenue_engine import get_certification_status
 from backend.owner_routes import router as owner_router
+from backend.institutional_routes import router as institutional_router
+# Import institutional models to register them with SQLModel
+from backend.institutional_models import (
+    MandateSubmission,
+    FrictionAnalytics,
+    DiscrepancyReport,
+    EnforcementAction,
+)
 from typing import Optional
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -17,10 +26,30 @@ import logging
 
 app = FastAPI()
 
+# CORS Configuration: Allow frontend at localhost:5173 and Vercel deployment
+# Note: Update allow_origins with specific Vercel URL after deployment for production hardening
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",      # Development frontend
+        "http://127.0.0.1:5173",      # Alternative localhost
+        "http://localhost:3000",      # Alternative port (for testing)
+        "*",                           # Allow all origins (Vercel URLs, public access)
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],  # Allow all headers, including X-API-Key
+)
+
 # Include owner routes (allocation endpoints)
 app.include_router(owner_router)
 
-API_KEY = os.getenv('GRIDLEDGER_API_KEY', 'letmein123')
+# Include institutional routes (GL-1 mandate logging & audit trail)
+app.include_router(institutional_router)
+
+API_KEY = os.getenv('GRIDLEDGER_API_KEY')
+if not API_KEY:
+    raise RuntimeError('GRIDLEDGER_API_KEY environment variable is required. See .env.example.')
 
 def validate_api_key(x_api_key: Optional[str] = Header(None)):
     if x_api_key != API_KEY:

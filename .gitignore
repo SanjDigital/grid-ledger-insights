@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Environment variables (NEVER commit — contains secrets)
+.env
+.env.local
+.env.*.local

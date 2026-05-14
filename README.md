@@ -9,6 +9,12 @@
 
 ---
 
+## Security Notice
+
+**This repository contains no secrets.** All API keys and credentials are supplied via environment variables at runtime. See [`.env.example`](.env.example) for required configuration. Never commit `.env`, `.env.local`, or similar files containing actual credentials.
+
+---
+
 ## The Problem
 
 Capital cannot reach informal industrial markets — maize mills, agro-processors, cold storage operators across sub-Saharan Africa — because truth cannot be established.
