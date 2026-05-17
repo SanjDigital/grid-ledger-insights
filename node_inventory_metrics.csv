@@ -1,0 +1,4 @@
+mill_id,total_cycles,sealed_cycles,verified_cycles,failed_cycles,interrupted_cycles,verified_completion_rate_pct,avg_integrity_score,min_integrity_score,max_integrity_score,avg_variance,min_variance,max_variance,total_usage_kwh,total_actual_cash,total_expected_revenue,cycles_with_seal,cycles_anchored,first_cycle_date,last_cycle_date,avg_adherence_pct
+NABIWI,705,705,0,0,0,100.0,,,,870.96,0.0,1350.0,22366.0,21718365.0,22332393.0,0,0,2023-07-10 00:00:00,2027-08-22 00:00:00,93.5
+MILL_904156,1,1,0,0,0,100.0,,,,1250.0,1250.0,1250.0,24.0,30000.0,31250.0,0,0,2025-10-22 00:00:00,2025-10-23 00:00:00,96.0
+MILL_209709,1,1,0,0,0,100.0,,,,800.0,800.0,800.0,30.0,24000.0,24800.0,0,0,2025-02-14 00:00:00,2025-02-15 00:00:00,96.8

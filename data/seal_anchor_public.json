@@ -1,0 +1,40 @@
+[
+  {
+    "cycle_id": "INTEGRITY-TEST-6C73B9F7",
+    "timestamp": "2026-05-07T09:20:46.782992+00:00",
+    "seal_hash": "2affbea2d2416c31ec151f3d464ac38fb6e21a698d6670a773b9ad4144cfed9d",
+    "canonical_data": {
+      "mandate_id": "INTEGRITY-TEST-6C73B9F7",
+      "submitted_by": "auditor_test",
+      "role": "verifier",
+      "timestamp": "2026-05-07T09:20:46.782992+00:00",
+      "mandate_version_hash": "v1.0.0-integrity-test",
+      "acknowledgment_type": "FULL_READ",
+      "session_id": "session-integrity-proof-001",
+      "status": "ACKNOWLEDGED",
+      "institution_name": "INTEGRITY_TEST_BANK",
+      "authorisation_level": "AUDITOR",
+      "capital_range": "TIER_A",
+      "mode_viewed": "AUDIT_VERIFICATION"
+    }
+  },
+  {
+    "cycle_id": "INTEGRITY-TEST-FCD23F21",
+    "timestamp": "2026-05-16T04:05:58.145204+00:00",
+    "seal_hash": "8ac4eabe9c883753011d51be255175b3d9c7be379d370c6888a4cd641f53d70d",
+    "canonical_data": {
+      "mandate_id": "INTEGRITY-TEST-FCD23F21",
+      "submitted_by": "auditor_test",
+      "role": "verifier",
+      "timestamp": "2026-05-16T04:05:58.145204+00:00",
+      "mandate_version_hash": "v1.0.0-integrity-test",
+      "acknowledgment_type": "FULL_READ",
+      "session_id": "session-integrity-proof-001",
+      "status": "ACKNOWLEDGED",
+      "institution_name": "INTEGRITY_TEST_BANK",
+      "authorisation_level": "AUDITOR",
+      "capital_range": "TIER_A",
+      "mode_viewed": "AUDIT_VERIFICATION"
+    }
+  }
+]

@@ -248,8 +248,8 @@ export default function Dashboard() {
                 {/* Trust Gauge */}
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                   <TrustGauge
-                    earPercentage={decisionBasis.energy_accountability_ratio}
-                    trustScore={decisionBasis.trust_integrity_score}
+                    verificationScore={decisionBasis.trust_integrity_score * 100}
+                    ear={decisionBasis.energy_accountability_ratio * 100}
                     fraudRiskLevel={decisionBasis.fraud_risk_level}
                   />
                 </div>

@@ -1,0 +1,4 @@
+Node,Total_Cycles,Sealed,Verified,Failed,Completion_%,Avg_Integrity,Avg_Variance,Days_Span,Glass_Box,Forensic,ESG,Portfolio,Baseline
+NABIWI,705,705,0,0,100.0,,870.96,1504,YES,YES,NO,YES,YES
+MILL_904156,1,1,0,0,100.0,,1250.0,1,NO,NO,NO,YES,NO
+MILL_209709,1,1,0,0,100.0,,800.0,1,NO,NO,NO,YES,NO
