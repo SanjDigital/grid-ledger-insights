@@ -1,7 +1,7 @@
 /**
  * useDecisionBasis Hook
  * 
- * Fetches allocation decision basis from /api/owner/mills/{mill_id}/decision
+ * Fetches allocation decision basis from /api/owner/mill/{mill_id}/decision
  * Provides:
  * - One-shot fetch on mount (no polling)
  * - Manual refresh with audit timestamp
@@ -57,7 +57,7 @@ export function useDecisionBasis(millId: string): UseDecisionBasisReturn {
 
     try {
       const response = await ownerApiClient.get<DecisionBasis>(
-        `/mills/${millId}/decision`
+        `/mill/${millId}/decision`
       );
       setData(response.data);
       setLastRefreshAt(new Date().toISOString());
