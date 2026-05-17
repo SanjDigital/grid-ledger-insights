@@ -87,20 +87,22 @@ const IndexContent = () => {
             </div>
           )}
 
-          {/* Variance Toggle (Demo) */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setVarianceOverride(v => v === null ? 3.7 : null)}
-              className={`px-3 py-1.5 rounded text-xs font-mono transition-all duration-200 active:scale-[0.97] ${
-                isRedAlert
-                  ? "bg-destructive/20 text-destructive border border-destructive/30 hover:bg-destructive/30"
-                  : "bg-secondary text-muted-foreground border border-border hover:bg-secondary/80"
-              }`}
-            >
-              {isRedAlert ? "⚠ Clear Alert Demo" : "⚡ Simulate Red Alert"}
-            </button>
-            <span className="text-[9px] font-mono text-muted-foreground">Toggle variance to test alert state</span>
-          </div>
+          {/* Variance Toggle (Demo) — gated behind VITE_SHOW_DEMO */}
+          {import.meta.env.VITE_SHOW_DEMO !== "false" && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setVarianceOverride(v => v === null ? 3.7 : null)}
+                className={`px-3 py-1.5 rounded text-xs font-mono transition-all duration-200 active:scale-[0.97] ${
+                  isRedAlert
+                    ? "bg-destructive/20 text-destructive border border-destructive/30 hover:bg-destructive/30"
+                    : "bg-secondary text-muted-foreground border border-border hover:bg-secondary/80"
+                }`}
+              >
+                {isRedAlert ? "⚠ Clear Alert Demo" : "⚡ Simulate Red Alert"}
+              </button>
+              <span className="text-[9px] font-mono text-muted-foreground">Toggle variance to test alert state</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <AuditPanel data={currentForensic} isRedAlert={isRedAlert} perEventForensics={computed.perEvent} enforcement={computed.enforcement} />

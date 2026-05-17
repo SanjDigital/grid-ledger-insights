@@ -136,7 +136,7 @@ export function computeForensics(
   // Trust tier (derived from API trust score)
   let trustTier: TrustTier;
   if (trustScore >= 85) trustTier = "INSTITUTIONAL";
-  else if (trustScore >= 70) trustTier = "COMMERCIAL";
+  else if (trustScore >= 70) trustTier = "CORROBORATED";
   else if (trustScore >= 50) trustTier = "SUBPRIME";
   else trustTier = "HIGH RISK";
 
@@ -304,7 +304,7 @@ export function computeForensics(
 export function getEARTier(earPercent: number): TrustTier {
   const earRatio = earPercent / 100;
   if (earRatio >= 0.95) return "INSTITUTIONAL";
-  if (earRatio >= 0.90) return "COMMERCIAL";
+  if (earRatio >= 0.90) return "CORROBORATED";
   if (earRatio >= 0.50) return "SUBPRIME";
   return "HIGH RISK";
 }
@@ -322,7 +322,7 @@ export function formatEARDisplay(earPercent: number): string {
 export function getTrustTierLabel(tier: TrustTier): string {
   const labels: Record<TrustTier, string> = {
     INSTITUTIONAL: "Institutional Grade",
-    COMMERCIAL: "Commercial",
+    CORROBORATED: "Corroborated",
     SUBPRIME: "Subprime",
     "HIGH RISK": "High Risk",
   };
