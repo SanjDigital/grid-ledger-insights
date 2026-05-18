@@ -1,6 +1,6 @@
 // frontend/src/pages/Index.tsx
 // UPDATED: May 13, 2026 - Live decision endpoint with manual refresh & audit timestamp
-
+import { GridLedgerWordmark } from "@/components/GridLedgerWordmark";
 import React, { useState, useEffect } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { TrustGauge } from '@/components/TrustGauge';
