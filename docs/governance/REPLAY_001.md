@@ -52,43 +52,55 @@ NABIWI|2026-03-14 00:00:00|2026-03-15 00:00:00|19.0|25650.0|25650.0|
 
 c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7006bfffc
 
-
 ### Verification Status
 
-**✓ MATCH** — The seal stored in the operational database matches the independently computed seal. This cycle record is cryptographically intact.
+**MATCH** — The seal stored in the operational database matches the independently computed seal. This cycle record is cryptographically intact.
 
----
 ---
 
 ## 4. How to Independently Verify
 
-### Replay Command
+### Prerequisites
+- Python 3.9+
+- No API keys, no backend access, no permissions required
 
-```bash
-python -c "
+### Step 1 — Save this Python script as `verify_seal.py`
+
+```python
 import hashlib
-seal = hashlib.sha256(
-    'NABIWI|2026-03-14 00:00:00|2026-03-15 00:00:00|19.0|25650.0|25650.0|'.encode()
-).hexdigest()
-print(f'Computed seal: {seal}')
-print(f'Published seal: c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7006bfffc')
-print(f'Match: {seal == \"c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7006bfffc\"}')
-"
+
+INPUT_STRING = (
+    "NABIWI|"
+    "2026-03-14 00:00:00|"
+    "2026-03-15 00:00:00|"
+    "19.0|"
+    "25650.0|"
+    "25650.0|"
+)
+PUBLISHED_SEAL = "c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7006bfffc"
+
+computed = hashlib.sha256(INPUT_STRING.encode()).hexdigest()
+print(f"Computed seal: {computed}")
+print(f"Published seal: {PUBLISHED_SEAL}")
+print(f"Match: {computed == PUBLISHED_SEAL}")
+
+Step 2 — Run it
+
+python verify_seal.py
+
 Expected Output
 
-Plaintext
 Computed seal: c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7006bfffc
 Published seal: c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7006bfffc
 Match: True
 
-## 5. Database Provenance
+5. Database Provenance
+The seal was computed against the local SQLite operational database (gridledger.db) as of May 2026. The cycle record was ingested from SMS production reports. ESCOM token records and Airtel Money receipts for this cycle exist independently and will be cross‑referenced as those external data sources are integrated.
 
-The seal was computed against the local SQLite operational database (gridledger.db) as of May 2026. The cycle record was ingested from SMS production reports. ESCOM token records and Airtel Money receipts for this cycle exist independently and will be cross‑referenced as those external data sources are integrated.  
+. Constitutional Guarantee
+"Any auditor can fetch the raw events and the open‑source protocol from the public repository and independently recompute every seal."
 
-## 6. Constitutional Guarantee
+This artifact demonstrates that the guarantee holds for Cycle 1. The seal is the moat. The repository is the proof. The governance version is the constitutional memory.
 
-"Any auditor can fetch the raw events and the open‑source protocol from the public repository and independently recompute every seal."  
-
-This artifact demonstrates that the guarantee holds for Cycle 1. The seal is the moat. The repository is the proof. The governance version is the constitutional memory.  
-
-GridLedger IP Ltd — Verification Authority ISIC Rev. 4, Section M, Division 74, Class 7490 | May 2026
+GridLedger IP Ltd — Verification Authority
+ISIC Rev. 4, Section M, Division 74, Class 7490 | May 2026
