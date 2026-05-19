@@ -75,14 +75,18 @@ print(f'Published seal: c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7
 print(f'Match: {seal == \"c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7006bfffc\"}')
 "
 Expected Output
+
 Plaintext
 Computed seal: c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7006bfffc
 Published seal: c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7006bfffc
 Match: True
-5. Database Provenance
+
+## 5. Database Provenance
+
 The seal was computed against the local SQLite operational database (gridledger.db) as of May 2026. The cycle record was ingested from SMS production reports. ESCOM token records and Airtel Money receipts for this cycle exist independently and will be cross‑referenced as those external data sources are integrated.  
 
-6. Constitutional Guarantee
+## 6. Constitutional Guarantee
+
 "Any auditor can fetch the raw events and the open‑source protocol from the public repository and independently recompute every seal."  
 
 This artifact demonstrates that the guarantee holds for Cycle 1. The seal is the moat. The repository is the proof. The governance version is the constitutional memory.  
