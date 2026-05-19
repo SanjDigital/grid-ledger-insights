@@ -58,6 +58,7 @@ c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7006bfffc
 **✓ MATCH** — The seal stored in the operational database matches the independently computed seal. This cycle record is cryptographically intact.
 
 ---
+---
 
 ## 4. How to Independently Verify
 
@@ -85,12 +86,11 @@ Published seal: c7724cb1756f5e9d7bb160c77fe34aaf3d62e5bdeba2877231afedc7006bfffc
 Match: True
 
 5. Database Provenance
-The seal was computed against the local SQLite operational database (gridledger.db) as of May 2026. The cycle record was ingested from SMS production reports. ESCOM token records and Airtel Money receipts for this cycle exist independently and will be cross‑referenced as those external data sources are integrated.
+The seal was computed against the local SQLite operational database (gridledger.db) as of May 2026. The cycle record was ingested from SMS production reports. ESCOM token records and Airtel Money receipts for this cycle exist independently and will be cross‑referenced as those external data sources are integrated.
 
 6. Constitutional Guarantee
 "Any auditor can fetch the raw events and the open‑source protocol from the public repository and independently recompute every seal."
 
-This artifact demonstrates that the guarantee holds for Cycle 1. The seal is the moat. The repository is the proof. The governance version is the constitutional memory.
+This artifact demonstrates that the guarantee holds for Cycle 1. The seal is the moat. The repository is the proof. The governance version is the constitutional memory.  
 
-GridLedger IP Ltd — Verification Authority
-ISIC Rev. 4, Section M, Division 74, Class 7490 | May 2026
+GridLedger IP Ltd — Verification Authority ISIC Rev. 4, Section M, Division 74, Class 7490 | May 2026
