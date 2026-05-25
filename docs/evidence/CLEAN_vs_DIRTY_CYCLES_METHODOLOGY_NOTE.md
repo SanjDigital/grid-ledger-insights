@@ -66,13 +66,13 @@ Status: DIRTY (unconfirmed interruption) ✗
 
 ## Statistical Use
 
-### 62-Cycle Clean Window
+### 26-Cycle Clean Window
 
-The `GLASSBOX_62_CLEAN_CYCLES.csv` file represents a consecutive sequence of clean cycles. This window is used by lenders to:
+The `GLASSBOX_26_CLEAN_CYCLES.csv` file represents a complete set of sealed clean cycles available in the Nabiwi dataset. This window is used by lenders to:
 
-- **Establish baseline performance** — What is the operator's typical variance and cash flow?
-- **Calibrate advance rates** — At 96.78% adherence over 10 cycles, the operator can support 60% LTV structures.
-- **Verify sealing integrity** — Hash all 10 cycles and confirm the mechanism works.
+- **Establish baseline performance** — What is the operator's observed variance and cash flow?
+- **Calibrate advance rates** — At 100.00% adherence over 26 cycles, the operator demonstrates strong revenue integrity.
+- **Verify sealing integrity** — Hash all 26 cycles and confirm the mechanism works.
 
 ### Dirty Cycles in Exclusion Tables
 
@@ -111,7 +111,7 @@ GridLedger separates three dimensions that traditional credit systems conflate:
 
 | Dimension | Finding |
 |-----------|---------|
-| Operator Discipline | **HIGH** — 62-cycle clean run, 93% adherence |
+| Operator Discipline | **HIGH** — 26-cycle clean run, 100% adherence |
 | Infrastructure Reliability | **LOW** — 12 outages in 31 days, IAF 0.38 |
 | Verification Integrity | **HIGH** — 100% hash match rate, seal replay successful |
 
@@ -124,11 +124,11 @@ GridLedger separates three dimensions that traditional credit systems conflate:
 
 ## Data Integrity Boundary
 
-All cycles in the `GLASSBOX_62_CLEAN_CYCLES.csv` file:
+All cycles in the `GLASSBOX_26_CLEAN_CYCLES.csv` file:
 - Are sealed and hash-verified
 - Show variance within ±5%
 - Have complete energy and cash evidence chains
-- Are institutional clean for credit committee review
+- Are institutionally clean for credit committee review
 
 Dirty cycles and exclusion logic will be published separately as sovereign corroboration data is integrated.
 
@@ -136,7 +136,7 @@ Dirty cycles and exclusion logic will be published separately as sovereign corro
 
 ## Footnote: Methodology Demonstration Status
 
-The Nabiwi Fragility Profile contains exclusion tables that are **methodology demonstrations**, not attested production exclusions. They illustrate how the classification logic will work once ESCOM and Airtel Money records are cross-referenced. The canonical 10-cycle clean window in `GLASSBOX_62_CLEAN_CYCLES.csv` is production data, immediately suitable for credit review.
+The Nabiwi Fragility Profile contains exclusion tables that are **methodology demonstrations**, not attested production exclusions. They illustrate how the classification logic will work once ESCOM and Airtel Money records are cross-referenced. The canonical 26-cycle clean window in `GLASSBOX_26_CLEAN_CYCLES.csv` is production data, immediately suitable for credit review.
 
 ---
 
