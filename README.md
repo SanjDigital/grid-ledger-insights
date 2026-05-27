@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/brand/wordmark_dark.png" alt="GridLedger | Enforcement Protocol" width="480"/>
+  <img src="docs/brand/wordmark_dark.png" alt="GridLedger | Verification Infrastructure" width="480"/>
 </p>
 
 ---
