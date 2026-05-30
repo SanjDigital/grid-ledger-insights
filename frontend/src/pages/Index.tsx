@@ -173,10 +173,7 @@ export default function Dashboard() {
       <div className="border-b border-slate-700 bg-slate-900/50 backdrop-blur">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white">GridLedger Protocol GL-1</h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Institutional Governance | Mandate Logging | Forensic Engine
-            </p>
+            <GridLedgerWordmark showClassification={true} size="md" />
           </div>
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-3">
@@ -248,9 +245,9 @@ export default function Dashboard() {
                 {/* Trust Gauge */}
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                   <TrustGauge
-                    verificationScore={decisionBasis.trust_integrity_score * 100}
+                    score={decisionBasis.trust_integrity_score * 100}
                     ear={decisionBasis.energy_accountability_ratio * 100}
-                    fraudRiskLevel={decisionBasis.fraud_risk_level}
+                    isRedAlert={decisionBasis.fraud_risk_level === 'HIGH'}
                   />
                 </div>
 
@@ -263,7 +260,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-sm text-slate-400">Trust Integrity Score</div>
+                    <div className="text-sm text-slate-400">Verification Score</div>
                     <div className="text-2xl font-bold text-white">
                       {(decisionBasis.trust_integrity_score * 100).toFixed(1)}%
                     </div>

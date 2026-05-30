@@ -13,3 +13,8 @@ wheels/
 .env
 .env.local
 .env.*.local
+
+# Raw data (contains personal information and operator identifiers)
+data/
+*.csv
+*.json

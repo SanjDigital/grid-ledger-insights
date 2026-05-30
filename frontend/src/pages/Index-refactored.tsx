@@ -88,7 +88,7 @@ const IndexContent = () => {
           )}
 
           {/* Variance Toggle (Demo) — gated behind VITE_SHOW_DEMO */}
-          {import.meta.env.VITE_SHOW_DEMO !== "false" && (
+          {import.meta.env.VITE_SHOW_DEMO === "true" && (
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setVarianceOverride(v => v === null ? 3.7 : null)}
